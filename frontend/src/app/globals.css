@@ -1,0 +1,223 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: 'Newsreader';
+  src: url('/fonts/newsreader-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Newsreader';
+  src: url('/fonts/newsreader-latin-500-normal.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Newsreader';
+  src: url('/fonts/newsreader-latin-600-normal.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Instrument Sans';
+  src: url('/fonts/instrument-sans-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Instrument Sans';
+  src: url('/fonts/instrument-sans-latin-500-normal.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Instrument Sans';
+  src: url('/fonts/instrument-sans-latin-600-normal.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Instrument Sans';
+  src: url('/fonts/instrument-sans-latin-700-normal.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono-latin-500-normal.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* Radix UI Slate (Light) */
+  --bg-app: #f9f9fb;          /* slate2 */
+  --bg-surface: #ffffff;      /* elevated pure surface */
+  --bg-subtle: #f0f0f3;       /* slate3 */
+  --bg-surface-hover: #e8e8ec;/* slate4 */
+  --bg-active: #e0e1e6;       /* slate5 */
+
+  /* Hairlines and Borders */
+  --border-subtle: #d9d9e0;   /* slate6 */
+  --border-hairline: #cdced6; /* slate7 */
+  --border-strong: #b9bbc6;   /* slate8 */
+  --border-focus: #0090ff;    /* blue9 */
+
+  /* Typography */
+  --text-main: #1c2024;       /* slate12 - Contrast 15.6:1 */
+  --text-muted: #60646c;      /* slate11 - Contrast 5.7:1 (Passes AA) */
+  --text-inverse: #ffffff;
+
+  /* Accent: Radix Blue */
+  --accent: #0090ff;          /* blue9 for borders/subtle */
+  --accent-hover: #0588f0;    /* blue10 */
+  --accent-subtle: #e6f4fe;   /* blue3 */
+  --accent-text: #0d74ce;     /* blue11 for text - Contrast 4.77:1 (Passes AA) */
+  --accent-solid-bg: #0d74ce; /* blue11 for solid button fill - Contrast 4.77:1 with white */
+  --accent-solid-hover: #09589e; /* blue12 */
+  --accent-solid-text: #ffffff;
+  --accent-contrast: #ffffff;
+
+  /* Increase / Decrease: Radix Green / Red text */
+  --trend-up: #218358;        /* green11 text - Contrast 4.72:1 (Passes AA) */
+  --trend-up-subtle: #e6f6eb; /* green3 */
+  --trend-down: #ce2c31;      /* red11 text - Contrast 5.21:1 (Passes AA) */
+  --trend-down-subtle: #feebec;/* red3 */
+
+  /* Dedicated Waterfall Bars (never mixed with series colours) */
+  --waterfall-up: #59A14F;
+  --waterfall-down: #E15759;
+
+  /* Chart Series (10 colours, in order, 1 colour default: #4E79A7) */
+  --chart-1: #4E79A7;
+  --chart-2: #F28E2B;
+  --chart-3: #E15759;
+  --chart-4: #76B7B2;
+  --chart-5: #59A14F;
+  --chart-6: #EDC948;
+  --chart-7: #B07AA1;
+  --chart-8: #FF9DA7;
+  --chart-9: #9C755F;
+  --chart-10: #BAB0AC;
+
+  /* Radii & Shadows */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --shadow-overlay: 0 4px 20px -2px rgba(28, 32, 36, 0.12), 0 2px 6px -1px rgba(28, 32, 36, 0.08);
+}
+
+.dark, [data-theme="dark"] {
+  /* Radix UI Slate Dark */
+  --bg-app: #111113;          /* slateDark1 */
+  --bg-surface: #18191b;      /* slateDark2 / elevated #212225 */
+  --bg-subtle: #212225;       /* slateDark3 */
+  --bg-surface-hover: #272a2d;/* slateDark4 */
+  --bg-active: #2e3135;       /* slateDark5 */
+
+  /* Hairlines and Borders */
+  --border-subtle: #363a3f;   /* slateDark6 */
+  --border-hairline: #43484e; /* slateDark7 */
+  --border-strong: #5a6169;   /* slateDark8 */
+  --border-focus: #0090ff;    /* blueDark9 */
+
+  /* Typography */
+  --text-main: #edeef0;       /* slateDark12 - Contrast 15.2:1 */
+  --text-muted: #b0b4ba;      /* slateDark11 - Contrast 8.5:1 (Passes AA) */
+  --text-inverse: #111113;
+
+  /* Accent: Radix Blue Dark */
+  --accent: #0090ff;          /* blueDark9 */
+  --accent-hover: #3b9eff;    /* blueDark10 */
+  --accent-subtle: #0d2847;   /* blueDark3 */
+  --accent-text: #70b8ff;     /* blueDark11 text - Contrast 8.37:1 (Passes AA) */
+  --accent-solid-bg: #0090ff; /* blueDark9 for solid button fill */
+  --accent-solid-hover: #3b9eff; /* blueDark10 */
+  --accent-solid-text: #111113; /* Contrast 5.78:1 with #0090ff (Passes AA) */
+  --accent-contrast: #111113;
+
+  /* Increase / Decrease: Radix Green / Red text */
+  --trend-up: #3dd68c;        /* greenDark11 text - Contrast 9.38:1 (Passes AA) */
+  --trend-up-subtle: #132d21; /* greenDark3 */
+  --trend-down: #ff9592;      /* redDark11 text - Contrast 8.35:1 (Passes AA) */
+  --trend-down-subtle: #3b1219;/* redDark3 */
+
+  /* Dedicated Waterfall Bars */
+  --waterfall-up: #59A14F;
+  --waterfall-down: #E15759;
+
+  /* Chart Series in Dark Mode */
+  --chart-1: #4E79A7;
+  --chart-2: #F28E2B;
+  --chart-3: #E15759;
+  --chart-4: #76B7B2;
+  --chart-5: #59A14F;
+  --chart-6: #EDC948;
+  --chart-7: #B07AA1;
+  --chart-8: #FF9DA7;
+  --chart-9: #9C755F;
+  --chart-10: #BAB0AC;
+
+  --shadow-overlay: 0 4px 24px -2px rgba(0, 0, 0, 0.5), 0 2px 8px -1px rgba(0, 0, 0, 0.3);
+}
+
+body {
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Explicit Typography Classes */
+.font-newsreader, .font-heading, .font-wordmark {
+  font-family: 'Newsreader', Georgia, serif;
+}
+
+.font-instrument, .font-ui, .font-sans {
+  font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.font-jetbrains, .font-mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-feature-settings: "calt" 1;
+}
+
+.tnum, .tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.transition-subtle {
+  transition: opacity 150ms cubic-bezier(0, 0, 0.2, 1), transform 150ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

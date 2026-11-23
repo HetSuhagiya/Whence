@@ -1,0 +1,27 @@
+{
+  "name": "whence-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Whence: Click-to-explain analytical dashboard product",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && ../.venv/bin/uvicorn app.main:app --reload --port 8000 --host 127.0.0.1",
+    "build": "cd frontend && npm run build",
+    "lint": "npm run lint:frontend && npm run lint:backend",
+    "lint:frontend": "cd frontend && npm run lint",
+    "lint:backend": ".venv/bin/ruff check backend",
+    "format:check": ".venv/bin/ruff format --check backend",
+    "format": ".venv/bin/ruff format backend",
+    "typecheck": "npm run typecheck:frontend && npm run typecheck:backend",
+    "typecheck:frontend": "cd frontend && npx tsc --noEmit",
+    "typecheck:backend": ".venv/bin/mypy backend/app",
+    "test": "npm run test:frontend && npm run test:backend",
+    "test:frontend": "cd frontend && npm run test",
+    "test:backend": ".venv/bin/pytest backend/tests -v",
+    "eval": "echo 'Evaluation harness will run in Phase 1'"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.5"
+  }
+}
