@@ -1,0 +1,221 @@
+{
+  "scenario_1_category_drop_40pct": {
+    "name": "One category orders drop 40%",
+    "tiers": {
+      "5%": {
+        "effect_size": 0.05,
+        "runs": 20,
+        "hits": 20,
+        "hit_rate_wilson": [
+          0.8389,
+          1.0
+        ],
+        "confidence_breakdown": {
+          "high": 8,
+          "medium": 0,
+          "low": 12,
+          "high_pct": 0.4,
+          "med_pct": 0.0,
+          "low_pct": 0.6
+        }
+      },
+      "10%": {
+        "effect_size": 0.1,
+        "runs": 20,
+        "hits": 20,
+        "hit_rate_wilson": [
+          0.8389,
+          1.0
+        ],
+        "confidence_breakdown": {
+          "high": 20,
+          "medium": 0,
+          "low": 0,
+          "high_pct": 1.0,
+          "med_pct": 0.0,
+          "low_pct": 0.0
+        }
+      },
+      "20%": {
+        "effect_size": 0.2,
+        "runs": 20,
+        "hits": 20,
+        "hit_rate_wilson": [
+          0.8389,
+          1.0
+        ],
+        "confidence_breakdown": {
+          "high": 20,
+          "medium": 0,
+          "low": 0,
+          "high_pct": 1.0,
+          "med_pct": 0.0,
+          "low_pct": 0.0
+        }
+      },
+      "40%": {
+        "effect_size": 0.4,
+        "runs": 20,
+        "hits": 20,
+        "hit_rate_wilson": [
+          0.8389,
+          1.0
+        ],
+        "confidence_breakdown": {
+          "high": 20,
+          "medium": 0,
+          "low": 0,
+          "high_pct": 1.0,
+          "med_pct": 0.0,
+          "low_pct": 0.0
+        }
+      }
+    }
+  },
+  "scenario_2_state_spike": {
+    "name": "One state spikes",
+    "tiers": {
+      "5%": {
+        "effect_size": 0.05,
+        "runs": 20,
+        "hits": 20,
+        "hit_rate_wilson": [
+          0.8389,
+          1.0
+        ],
+        "confidence_breakdown": {
+          "high": 0,
+          "medium": 0,
+          "low": 20,
+          "high_pct": 0.0,
+          "med_pct": 0.0,
+          "low_pct": 1.0
+        }
+      },
+      "10%": {
+        "effect_size": 0.1,
+        "runs": 20,
+        "hits": 20,
+        "hit_rate_wilson": [
+          0.8389,
+          1.0
+        ],
+        "confidence_breakdown": {
+          "high": 0,
+          "medium": 0,
+          "low": 20,
+          "high_pct": 0.0,
+          "med_pct": 0.0,
+          "low_pct": 1.0
+        }
+      },
+      "20%": {
+        "effect_size": 0.2,
+        "runs": 20,
+        "hits": 20,
+        "hit_rate_wilson": [
+          0.8389,
+          1.0
+        ],
+        "confidence_breakdown": {
+          "high": 7,
+          "medium": 0,
+          "low": 13,
+          "high_pct": 0.35,
+          "med_pct": 0.0,
+          "low_pct": 0.65
+        }
+      },
+      "40%": {
+        "effect_size": 0.4,
+        "runs": 20,
+        "hits": 20,
+        "hit_rate_wilson": [
+          0.8389,
+          1.0
+        ],
+        "confidence_breakdown": {
+          "high": 20,
+          "medium": 0,
+          "low": 0,
+          "high_pct": 1.0,
+          "med_pct": 0.0,
+          "low_pct": 0.0
+        }
+      }
+    }
+  },
+  "scenario_6_price_fall": {
+    "name": "Prices fall inside every category",
+    "tiers": {
+      "5%": {
+        "effect_size": 0.05,
+        "runs": 20,
+        "hits": 20,
+        "hit_rate_wilson": [
+          0.8389,
+          1.0
+        ],
+        "confidence_breakdown": {
+          "high": 0,
+          "medium": 0,
+          "low": 20,
+          "high_pct": 0.0,
+          "med_pct": 0.0,
+          "low_pct": 1.0
+        }
+      },
+      "10%": {
+        "effect_size": 0.1,
+        "runs": 20,
+        "hits": 20,
+        "hit_rate_wilson": [
+          0.8389,
+          1.0
+        ],
+        "confidence_breakdown": {
+          "high": 0,
+          "medium": 0,
+          "low": 20,
+          "high_pct": 0.0,
+          "med_pct": 0.0,
+          "low_pct": 1.0
+        }
+      },
+      "20%": {
+        "effect_size": 0.2,
+        "runs": 20,
+        "hits": 20,
+        "hit_rate_wilson": [
+          0.8389,
+          1.0
+        ],
+        "confidence_breakdown": {
+          "high": 0,
+          "medium": 0,
+          "low": 20,
+          "high_pct": 0.0,
+          "med_pct": 0.0,
+          "low_pct": 1.0
+        }
+      },
+      "40%": {
+        "effect_size": 0.4,
+        "runs": 20,
+        "hits": 20,
+        "hit_rate_wilson": [
+          0.8389,
+          1.0
+        ],
+        "confidence_breakdown": {
+          "high": 0,
+          "medium": 0,
+          "low": 20,
+          "high_pct": 0.0,
+          "med_pct": 0.0,
+          "low_pct": 1.0
+        }
+      }
+    }
+  }
+}

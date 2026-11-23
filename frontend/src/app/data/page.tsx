@@ -19,6 +19,7 @@ import {
   TableDetail,
   TablePreviewResponse,
 } from "@/lib/api";
+import { SemanticLayerManager } from "@/components/semantic/SemanticLayerManager";
 import {
   AlertCircle,
   ArrowRight,
@@ -78,6 +79,7 @@ const DEFAULT_CHECKS: { id: string; title: string; defaultMsg: string }[] = [
 ];
 
 export default function DataConnectionsPage() {
+  const [activeTab, setActiveTab] = React.useState<"connection" | "semantic">("connection");
   const [step, setStep] = React.useState<1 | 2 | 3>(1);
   const [connections, setConnections] = React.useState<ConnectionPublic[]>([]);
   const [currentConnection, setCurrentConnection] = React.useState<ConnectionPublic | null>(null);
@@ -520,8 +522,47 @@ export default function DataConnectionsPage() {
       </div>
 
       <div className="flex flex-col gap-6 max-w-5xl mx-auto pb-16">
-        {/* Header & Steps Breadcrumb */}
-        <div className="flex flex-col gap-2 border-b border-[var(--border-hairline)] pb-4">
+        {/* Top-Level Tabs: Connection vs Semantic Layer */}
+        <div className="flex items-center gap-2 border-b border-[var(--border-hairline)]">
+          <button
+            type="button"
+            onClick={() => setActiveTab("connection")}
+            className={`pb-2.5 px-3 text-[13px] font-medium border-b-2 transition-subtle cursor-pointer ${
+              activeTab === "connection"
+                ? "border-[var(--accent-blue-11)] text-[var(--text-main)]"
+                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]"
+            }`}
+            data-testid="tab-connection"
+          >
+            Warehouse connection
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("semantic")}
+            className={`pb-2.5 px-3 text-[13px] font-medium border-b-2 transition-subtle cursor-pointer ${
+              activeTab === "semantic"
+                ? "border-[var(--accent-blue-11)] text-[var(--text-main)]"
+                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]"
+            }`}
+            data-testid="tab-semantic"
+          >
+            Semantic layer
+          </button>
+        </div>
+
+        {activeTab === "semantic" ? (
+          <SemanticLayerManager
+            connections={connections}
+            selectedConnectionId={currentConnection?.id}
+            onConnectionChange={(connId) => {
+              const matched = connections.find((c) => c.id === connId);
+              if (matched) setCurrentConnection(matched);
+            }}
+          />
+        ) : (
+          <>
+            {/* Header & Steps Breadcrumb */}
+            <div className="flex flex-col gap-2 border-b border-[var(--border-hairline)] pb-4">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="font-heading text-[22px] font-medium text-[var(--text-main)]">
@@ -1338,10 +1379,22 @@ export default function DataConnectionsPage() {
                   >
                     {sourcesSaved ? "Sources saved" : "Save connection & continue"}
                   </Button>
+                  {sourcesSaved && (
+                    <Button
+                      variant="primary"
+                      onClick={() => setActiveTab("semantic")}
+                      data-testid="go-to-semantic-btn"
+                    >
+                      Go to semantic layer
+                      <ArrowRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
           </div>
+        )}
+          </>
         )}
       </div>
 

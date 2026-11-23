@@ -1,0 +1,194 @@
+[
+  {
+    "name": "(a) Black Friday 2017 Spike",
+    "baseline_window": "2017-11-13 to 2017-11-19",
+    "current_window": "2017-11-20 to 2017-11-26",
+    "baseline_revenue": 175819.6899999985,
+    "current_revenue": 407169.06000000157,
+    "delta_revenue": 231349.37,
+    "percent_change": "+131.6%",
+    "confidence": "Medium",
+    "confidence_reason": "Top 3 drivers explain 69.9% of change across multiple segments.",
+    "top_drivers": [
+      {
+        "dimension": "state",
+        "segment": "SP",
+        "delta": 74330.94,
+        "share": "33.8%"
+      },
+      {
+        "dimension": "state",
+        "segment": "MG",
+        "delta": 45256.14,
+        "share": "20.6%"
+      },
+      {
+        "dimension": "state",
+        "segment": "RJ",
+        "delta": 33970.39,
+        "share": "15.5%"
+      }
+    ],
+    "offsetting_effects": false
+  },
+  {
+    "name": "(b1) Ordinary Week 1 (March 2017)",
+    "baseline_window": "2017-03-06 to 2017-03-12",
+    "current_window": "2017-03-13 to 2017-03-19",
+    "baseline_revenue": 78362.16000000019,
+    "current_revenue": 95524.37999999987,
+    "delta_revenue": 17162.22,
+    "percent_change": "+21.9%",
+    "confidence": "Low",
+    "confidence_reason": "Severe data quality issue (e.g. tracking zero drop, null spike, or duplicate load) dominates movement.",
+    "top_drivers": [
+      {
+        "dimension": "category",
+        "segment": "watches_gifts",
+        "delta": 8146.45,
+        "share": "50.5%"
+      },
+      {
+        "dimension": "state",
+        "segment": "RJ",
+        "delta": 7181.91,
+        "share": "40.7%"
+      },
+      {
+        "dimension": "state",
+        "segment": "SC",
+        "delta": 6254.94,
+        "share": "35.4%"
+      }
+    ],
+    "offsetting_effects": true
+  },
+  {
+    "name": "(b2) Ordinary Week 2 (May 2017)",
+    "baseline_window": "2017-05-08 to 2017-05-14",
+    "current_window": "2017-05-15 to 2017-05-21",
+    "baseline_revenue": 113051.55999999965,
+    "current_revenue": 122182.24999999953,
+    "delta_revenue": 9130.69,
+    "percent_change": "+8.1%",
+    "confidence": "Low",
+    "confidence_reason": "Change is within normal historical volatility; no single cause stands out.",
+    "top_drivers": [
+      {
+        "dimension": "state",
+        "segment": "SP",
+        "delta": 12941.87,
+        "share": "115.4%"
+      },
+      {
+        "dimension": "category",
+        "segment": "computers_accessories",
+        "delta": -8477.06,
+        "share": "-138.8%"
+      },
+      {
+        "dimension": "state",
+        "segment": "MG",
+        "delta": 5822.97,
+        "share": "51.9%"
+      }
+    ],
+    "offsetting_effects": true
+  },
+  {
+    "name": "(b3) Ordinary Week 3 (July 2017)",
+    "baseline_window": "2017-07-10 to 2017-07-16",
+    "current_window": "2017-07-17 to 2017-07-23",
+    "baseline_revenue": 114349.24999999949,
+    "current_revenue": 122535.86999999957,
+    "delta_revenue": 8186.62,
+    "percent_change": "+7.2%",
+    "confidence": "Low",
+    "confidence_reason": "Change is within normal historical volatility; no single cause stands out.",
+    "top_drivers": [
+      {
+        "dimension": "state",
+        "segment": "RJ",
+        "delta": 7715.39,
+        "share": "77.6%"
+      },
+      {
+        "dimension": "category",
+        "segment": "garden_tools",
+        "delta": 5207.1,
+        "share": "56.1%"
+      },
+      {
+        "dimension": "category",
+        "segment": "auto",
+        "delta": 3474.29,
+        "share": "37.5%"
+      }
+    ],
+    "offsetting_effects": true
+  },
+  {
+    "name": "(b4) Ordinary Week 4 (August 2017)",
+    "baseline_window": "2017-08-14 to 2017-08-20",
+    "current_window": "2017-08-21 to 2017-08-27",
+    "baseline_revenue": 127107.87999999948,
+    "current_revenue": 106754.07999999974,
+    "delta_revenue": -20353.8,
+    "percent_change": "-16.0%",
+    "confidence": "Low",
+    "confidence_reason": "Decline is broad-based across all categories and channels; no single driver accounts for the movement.",
+    "top_drivers": [
+      {
+        "dimension": "state",
+        "segment": "SP",
+        "delta": -6117.44,
+        "share": "30.7%"
+      },
+      {
+        "dimension": "category",
+        "segment": "bed_bath_table",
+        "delta": -4983.85,
+        "share": "25.7%"
+      },
+      {
+        "dimension": "state",
+        "segment": "RJ",
+        "delta": -4855.44,
+        "share": "24.4%"
+      }
+    ],
+    "offsetting_effects": false
+  },
+  {
+    "name": "(b5) Ordinary Week 5 (October 2017)",
+    "baseline_window": "2017-10-09 to 2017-10-15",
+    "current_window": "2017-10-16 to 2017-10-22",
+    "baseline_revenue": 155074.37999999855,
+    "current_revenue": 164132.88999999873,
+    "delta_revenue": 9058.51,
+    "percent_change": "+5.8%",
+    "confidence": "Low",
+    "confidence_reason": "Change is within normal historical volatility; no single cause stands out.",
+    "top_drivers": [
+      {
+        "dimension": "state",
+        "segment": "SP",
+        "delta": 7268.14,
+        "share": "158.1%"
+      },
+      {
+        "dimension": "category",
+        "segment": "health_beauty",
+        "delta": 6456.73,
+        "share": "61.6%"
+      },
+      {
+        "dimension": "category",
+        "segment": "watches_gifts",
+        "delta": 5411.94,
+        "share": "51.6%"
+      }
+    ],
+    "offsetting_effects": true
+  }
+]

@@ -19,7 +19,7 @@
     "test": "npm run test:frontend && npm run test:backend",
     "test:frontend": "cd frontend && npm run test",
     "test:backend": ".venv/bin/pytest backend/tests -v",
-    "eval": "echo 'Evaluation harness will run in Phase 1'"
+    "eval": "PYTHONPATH=backend .venv/bin/python3 -m eval.runner"
   },
   "devDependencies": {
     "concurrently": "^9.2.5"

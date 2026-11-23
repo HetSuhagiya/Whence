@@ -1,0 +1,32 @@
+{
+  "num_seeds": 200,
+  "uncorrected": {
+    "z_threshold": 1.96,
+    "false_alarms_med_or_high": 10,
+    "false_alarms_high": 2,
+    "false_alarm_rate": 0.05,
+    "wilson_med_or_high": [
+      0.0274,
+      0.0896
+    ],
+    "wilson_high": [
+      0.0027,
+      0.0357
+    ]
+  },
+  "corrected_bonferroni": {
+    "z_threshold": 2.39,
+    "dimension_count": 3,
+    "false_alarms_med_or_high": 4,
+    "false_alarms_high": 0,
+    "false_alarm_rate": 0.02,
+    "wilson_med_or_high": [
+      0.0078,
+      0.0503
+    ],
+    "wilson_high": [
+      0.0,
+      0.0188
+    ]
+  }
+}

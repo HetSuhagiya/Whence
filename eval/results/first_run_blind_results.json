@@ -1,0 +1,155 @@
+[
+  {
+    "id": "scenario_N1_small_effect",
+    "name": "N1 Small effect: one category falls 10 percent",
+    "confidence": "Low",
+    "confidence_reason": "Change is within normal historical volatility; no single cause stands out.",
+    "top_driver": "Electronics",
+    "top_driver_share": 1.0,
+    "top_drill": null,
+    "dq_flags": [],
+    "rate_effects": null,
+    "is_complete": true,
+    "expected_confidence": "Low",
+    "expected_top_drivers": [
+      "Electronics"
+    ],
+    "expected_flags": []
+  },
+  {
+    "id": "scenario_N2_two_way_segment",
+    "name": "N2 Two-way segment: state=California AND source=Paid Search",
+    "confidence": "High",
+    "confidence_reason": "Segment 'California:Paid Search' explains 100.0% of change, movement exceeds normal volatility (larger than 26 of the last 26 comparable period changes), and data is complete.",
+    "top_driver": "California:Paid Search",
+    "top_driver_share": 1.0,
+    "top_drill": {
+      "state": "California",
+      "traffic_source": "Paid Search"
+    },
+    "dq_flags": [],
+    "rate_effects": null,
+    "is_complete": true,
+    "expected_confidence": "High",
+    "expected_top_drivers": [
+      "California:Paid Search"
+    ],
+    "expected_flags": [
+      "two_way_drill"
+    ]
+  },
+  {
+    "id": "scenario_N3_mix_versus_rate",
+    "name": "N3 Mix versus rate: AOV rises while category prices fall",
+    "confidence": "High",
+    "confidence_reason": "Segment 'Electronics' explains 78.4% of change, movement exceeds normal volatility (larger than 26 of the last 26 comparable period changes), and data is complete.",
+    "top_driver": "Electronics",
+    "top_driver_share": 0.784,
+    "top_drill": null,
+    "dq_flags": [],
+    "rate_effects": [
+      {
+        "Electronics": [
+          -0.426,
+          2.7628
+        ]
+      },
+      {
+        "Accessories": [
+          -0.0573,
+          0.7182
+        ]
+      },
+      {
+        "Books": [
+          -0.0786,
+          0.4525
+        ]
+      }
+    ],
+    "is_complete": true,
+    "expected_confidence": "High",
+    "expected_top_drivers": [
+      "mix_effect"
+    ],
+    "expected_flags": [
+      "mix_effect"
+    ]
+  },
+  {
+    "id": "scenario_N4_duplicate_load",
+    "name": "N4 Duplicate load: all rows for one day loaded twice",
+    "confidence": "Low",
+    "confidence_reason": "Severe data quality issue (e.g. tracking zero drop, null spike, or duplicate load) dominates movement.",
+    "top_driver": null,
+    "top_driver_share": 0.0,
+    "top_drill": null,
+    "dq_flags": [
+      "duplicate_jump"
+    ],
+    "rate_effects": null,
+    "is_complete": true,
+    "expected_confidence": "Low",
+    "expected_top_drivers": [],
+    "expected_flags": [
+      "duplicate_jump"
+    ]
+  },
+  {
+    "id": "scenario_N5_null_spike",
+    "name": "N5 Null spike: state becomes NULL for 30 percent of rows",
+    "confidence": "Low",
+    "confidence_reason": "Severe data quality issue (e.g. tracking zero drop, null spike, or duplicate load) dominates movement.",
+    "top_driver": null,
+    "top_driver_share": 0.0,
+    "top_drill": null,
+    "dq_flags": [
+      "null_spike"
+    ],
+    "rate_effects": null,
+    "is_complete": true,
+    "expected_confidence": "Low",
+    "expected_top_drivers": [],
+    "expected_flags": [
+      "null_spike"
+    ]
+  },
+  {
+    "id": "scenario_N6_broad_decline",
+    "name": "N6 Broad decline: revenue falls 8 percent evenly",
+    "confidence": "Low",
+    "confidence_reason": "Decline is broad-based across all categories and channels; no single driver accounts for the movement.",
+    "top_driver": "Google Organic",
+    "top_driver_share": 0.368,
+    "top_drill": null,
+    "dq_flags": [],
+    "rate_effects": null,
+    "is_complete": true,
+    "expected_confidence": "Low",
+    "expected_top_drivers": [],
+    "expected_flags": [
+      "broad_based"
+    ]
+  },
+  {
+    "id": "scenario_N7_new_segment",
+    "name": "N7 New segment: category with 0 baseline orders appears",
+    "confidence": "High",
+    "confidence_reason": "Segment 'New Innovation' explains 100.0% of change, movement exceeds normal volatility (larger than 26 of the last 26 comparable period changes), and data is complete.",
+    "top_driver": "New Innovation",
+    "top_driver_share": 1.0,
+    "top_drill": null,
+    "dq_flags": [
+      "appearance_from_nothing"
+    ],
+    "rate_effects": null,
+    "is_complete": true,
+    "expected_confidence": "High",
+    "expected_top_drivers": [
+      "New Innovation"
+    ],
+    "expected_flags": [
+      "appearance_from_nothing"
+    ]
+  }
+]

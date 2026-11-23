@@ -53,6 +53,12 @@ class QueryGuardrailError(Exception):
     pass
 
 
+class QueryByteCapExceededError(QueryGuardrailError):
+    """Raised when a query's dry-run estimated bytes exceed the configured byte cap."""
+
+    pass
+
+
 class QueryTimeoutError(Exception):
     """Raised when query execution exceeds the configured timeout."""
 
@@ -187,10 +193,46 @@ def validate_sql(sql: str, dialect: str = "duckdb") -> exp.Select:
     return root_stmt
 
 
-def validate_metric_expression(expr: str, dialect: str = "duckdb") -> None:
+ALLOWED_METRIC_FUNCTIONS: frozenset[str] = frozenset(
+    {
+        "SUM",
+        "COUNT",
+        "AVG",
+        "MIN",
+        "MAX",
+        "COALESCE",
+        "NULLIF",
+        "ROUND",
+        "ABS",
+        "CEIL",
+        "FLOOR",
+        "CAST",
+        "SAFE_DIVIDE",
+        "DIVIDE",
+        "DATE_TRUNC",
+        "TIMESTAMP_TRUNC",
+        "DATE",
+        "DATETIME",
+        "DISTINCT",
+        "IF",
+    }
+)
+
+AGGREGATE_FUNCTIONS: frozenset[str] = frozenset({"SUM", "COUNT", "AVG", "MIN", "MAX"})
+
+
+def validate_metric_expression(
+    expr: str,
+    dialect: str = "duckdb",
+    allowed_columns: list[str] | set[str] | None = None,
+) -> None:
     """
-    Validates user-written or generated metric expressions (used in Item 2 Semantic Layer).
-    Wraps the expression in a SELECT query and validates AST against the hardened guardrail.
+    Validates user-written or generated metric expressions per Item 2 specifications:
+    1. Function allowlist (SUM, COUNT, AVG, MIN, MAX, COALESCE, NULLIF, SAFE_DIVIDE, etc.)
+    2. No subqueries
+    3. No window functions (OVER ...)
+    4. Only columns on the model's table or declared joins (when allowed_columns is provided)
+    5. Single aggregation level (no nested aggregations like SUM(AVG(...)))
     """
     if not expr or not expr.strip():
         raise QueryGuardrailError("Metric expression cannot be empty.")
@@ -201,7 +243,71 @@ def validate_metric_expression(expr: str, dialect: str = "duckdb") -> None:
         )
 
     synthetic_sql = f"SELECT {expr} FROM __whence_metric_validation_table__"
-    validate_sql(synthetic_sql, dialect=dialect)
+    root_stmt = validate_sql(synthetic_sql, dialect=dialect)
+
+    if not root_stmt.expressions:
+        raise QueryGuardrailError("Metric expression yielded no parseable projection.")
+
+    metric_target = root_stmt.expressions[0]
+
+    # Walk all nodes inside the metric expression
+    allowed_cols_set = (
+        {c.lower() for c in allowed_columns} if allowed_columns is not None else None
+    )
+
+    for node in metric_target.walk():
+        # 1. No window functions
+        if isinstance(node, (exp.Window, exp.WindowSpec)):
+            raise QueryGuardrailError(
+                "Guardrail violation: Window functions are not allowed in metric expressions."
+            )
+
+        # 2. No subqueries
+        if node is not metric_target and isinstance(node, (exp.Select, exp.Subquery)):
+            raise QueryGuardrailError(
+                "Guardrail violation: Subqueries are not allowed in metric expressions."
+            )
+
+        # 3. Function allowlist & single aggregation level
+        func_name = ""
+        if isinstance(node, exp.Anonymous):
+            func_name = node.this.upper()
+        elif isinstance(node, exp.Func):
+            func_name = node.sql_name().upper()
+
+        if func_name:
+            if func_name not in ALLOWED_METRIC_FUNCTIONS:
+                raise QueryGuardrailError(
+                    f"Guardrail violation: Function '{func_name}' is not in the allowed "
+                    "metric function list."
+                )
+
+            # 4. Check for nested aggregation level
+            if func_name in AGGREGATE_FUNCTIONS:
+                # Walk descendants of this aggregate node to check for nested aggregates
+                for child in node.walk():
+                    if child is node:
+                        continue
+                    child_func = ""
+                    if isinstance(child, exp.Anonymous):
+                        child_func = child.this.upper()
+                    elif isinstance(child, exp.Func):
+                        child_func = child.sql_name().upper()
+
+                    if child_func in AGGREGATE_FUNCTIONS:
+                        raise QueryGuardrailError(
+                            "Guardrail violation: Nested aggregations are not allowed in metric "
+                            f"expressions (found '{child_func}' inside '{func_name}')."
+                        )
+
+        # 5. Column validation against model schema
+        if isinstance(node, exp.Column) and allowed_cols_set is not None:
+            col_name = node.name.lower()
+            if col_name != "*" and col_name not in allowed_cols_set:
+                raise QueryGuardrailError(
+                    f"Guardrail violation: Column '{node.name}' is not on the model's table "
+                    "or declared joins."
+                )
 
 
 class WarehouseAdapter(ABC):

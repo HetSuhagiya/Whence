@@ -33,7 +33,9 @@ Whence/
 │       ├── dev_style_light.png
 │       ├── dev_style_dark.png
 │       ├── explain_dialog_light.png
-│       └── explain_dialog_dark.png
+│       ├── explain_dialog_dark.png
+│       ├── semantic_dimensions_light.png
+│       └── semantic_dimensions_dark.png
 ├── backend/
 │   ├── Dockerfile               # Python 3.12 production container
 │   ├── pyproject.toml           # Strict Ruff, Mypy, and Pytest configuration
@@ -43,31 +45,75 @@ Whence/
 │   │   ├── config.py            # Pydantic v2 settings loaded from environment
 │   │   ├── crypto.py            # AES-256-GCM encryption/decryption for credentials
 │   │   ├── audit.py             # Query audit logger (sql, bytes, duration, whence label)
-│   │   ├── db.py                # SQLite database initializer and connection sources storage
+│   │   ├── db.py                # SQLite database initializer, connection sources, models, metrics, and versions storage
+│   │   ├── demo_dataset.py      # Realistic synthetic ecommerce DuckDB generator (thelook_ecommerce schema)
 │   │   ├── main.py              # FastAPI application & REST routes (/api/v1)
 │   │   ├── adapters/            # Warehouse adapters behind unified interface
 │   │   │   ├── __init__.py
-│   │   │   ├── base.py          # WarehouseAdapter ABC, guardrails (SELECT-only, byte cap, timeout)
+│   │   │   ├── base.py          # WarehouseAdapter ABC, sqlglot guardrails (SELECT-only, byte cap, timeout, AST validation)
 │   │   │   ├── duckdb_adapter.py# DuckDB adapter (local dev, demo mode, eval)
 │   │   │   └── bigquery_adapter.py # Google BigQuery adapter (production target)
 │   │   ├── connections/         # [Phase 1 - Item 1b] Warehouse connection management
 │   │   │   ├── __init__.py
 │   │   │   ├── models.py        # Connection schemas, error mapping, and check models
-│   │   │   ├── service.py       # ConnectionService: key validation, encryption, 7 checks
+│   │   │   ├── service.py       # ConnectionService: key validation, encryption, 7 checks, zero-cost preview
 │   │   │   └── router.py        # REST API endpoints (/api/v1/connections)
 │   │   ├── semantic/            # [Phase 1 - Item 2] Semantic layer models & validation
+│   │   │   ├── __init__.py
+│   │   │   ├── models.py        # SemanticModel, Dimension, Metric, and MetricVersion schemas
+│   │   │   ├── service.py       # SemanticService: CRUD, versioning, explanation toggle, formula validation, 30-day preview, default ecommerce seed
+│   │   │   └── router.py        # REST API endpoints (/api/v1/semantic)
 │   │   ├── compiler/            # [Phase 1 - Item 3] Query compiler for chart types
-│   │   ├── explain/             # [Phase 1 - Item 4] Standalone explain engine package
-│   │   └── narrative/           # [Phase 1 - Item 6] LLM narrative & number check
+│   │   │   ├── __init__.py
+│   │   │   ├── spec.py          # ChartSpec, ChartType, TimeGrain, and CompiledQuery schemas
+│   │   │   ├── compiler.py      # QueryCompiler: multi-dialect SQL generator (DuckDB & BigQuery) with CTE ratio logic & identifier validation
+│   │   │   └── router.py        # REST API endpoints (/api/v1/compiler)
+│   │   ├── explain/             # [Phase 1 - Item 4] Standalone explain engine package (ZERO web/LLM imports)
+│   │   │   ├── __init__.py      # Public exports
+│   │   │   ├── models.py        # Pydantic models: Evidence, Finding, DriverContribution, NoiseCheckResult, SeasonalityResult
+│   │   │   ├── interface.py     # Small warehouse-agnostic QueryRunner protocol
+│   │   │   ├── contribution.py  # Section 8.3 maths: additive deltas, offsetting effects, exact two-point rate/mix split
+│   │   │   ├── pipeline.py      # Section 8.2 typed pipeline functions (resolve, completeness, noise, seasonality, drivers, drill, dq, events, confidence, evidence)
+│   │   │   └── engine.py        # ExplainEngine orchestrator
+│   │   ├── narrative/           # [Phase 1 - Item 6] Verified narrative generation
+│   │   │   ├── __init__.py
+│   │   │   ├── client.py        # LLMClient protocol, daily token tracker, fake/gemini/openai providers
+│   │   │   ├── checker.py       # NumberChecker: regex validation of numbers & segments vs Evidence
+│   │   │   ├── fallback.py      # DeterministicFallbackGenerator: calibrated templates without LLM
+│   │   │   ├── models.py        # NarrativeOutput and token usage logs
+│   │   │   └── service.py       # NarrativeService: rendering, 1-retry feedback loop, verification
+│   │   └── dashboards/          # [Phase 1 - Item 7] Dashboards and chart execution subsystem
+│   │       ├── __init__.py
+│   │       ├── models.py        # Dashboard and chart public/create schemas
+│   │       ├── service.py       # DashboardService, dynamic 5 demo specs, session caching, SSE streaming
+│   │       └── router.py        # REST routes (/api/v1/dashboards) and SSE streaming endpoint
+│   ├── prompts/                 # [Phase 1 - Item 6] Versioned prompt templates
+│   │   └── v1/
+│   │       ├── narrative_system.txt # System prompt (style rules, plain prose, no hype)
+│   │       └── narrative_user.txt   # User prompt (Evidence object injection, JSON schema)
 │   └── tests/
-│       ├── test_adapters.py     # Warehouse adapter tests (DuckDB live, BigQuery mock)
+│       ├── test_adapters.py     # Warehouse adapter tests (DuckDB live, BigQuery mock, sqlglot injection attempts, metric rules)
 │       ├── test_api.py          # FastAPI endpoint integration tests
-│       ├── test_connections.py  # [Item 1b] Key validation, 7 checks, error mapping. BigQuery verified live by user (23 Nov 2026); automated live test opt-in via WHENCE_LIVE_BQ_KEY_PATH
-│       └── test_crypto.py       # AES-256-GCM credential encryption tests
-├── eval/                        # [Phase 1 - Item 5] Standalone evaluation harness
-│   ├── scenarios/               # 12 planted analytical cause scenarios
-│   ├── dataset.py               # Synthetic ecommerce DuckDB generator
-│   └── run.py                   # Evaluation runner and calibration metrics
+│       ├── test_connections.py  # [Item 1b] Key validation, 7 checks, error mapping
+│       ├── test_crypto.py       # AES-256-GCM credential encryption tests
+│       ├── test_semantic.py     # [Item 2] Semantic model CRUD, dimension toggle, metric versioning, formula validation, preview trend
+│       ├── test_compiler.py     # [Item 3] Multi-dialect compiler, many-to-one joins (thelook schema), partition filter enforcement, dry-run bytes cap, golden SQL snapshots
+│       ├── test_explain.py      # [Item 4] Step unit tests, hand-calculated rate/mix split, additive deltas, noise check, DQ scan
+│       ├── test_explain_imports.py # [Item 4] AST test enforcing zero web/LLM imports in explain package
+│       ├── test_narrative.py    # [Item 6] Number checker (figures & segments), fallback templates, fake provider, payload inspection, empty API key
+│       └── test_dashboards.py   # [Item 7] 5 demo specs compilation, dashboard CRUD, SSE streaming explain pipeline
+├── eval/                        # [Phase 1 - Item 5 & Step 5b] Standalone evaluation harness (Section 15)
+│   ├── __init__.py
+│   ├── scenarios.json           # Declarative definitions of all 12 planted scenarios + 7 blind scenarios (N1-N7)
+│   ├── generator.py             # Synthetic ecommerce generator supporting reproducible random seeds
+│   ├── baseline.py              # Naive baseline (ranks segments by absolute change in single highest-variance dimension)
+│   ├── runner.py                # Evaluation runner comparing engine vs baseline across Dev & 5 fresh prime holdout seeds
+│   ├── stats_utils.py           # Wilson score 95% confidence interval utility
+│   ├── noise_sweep.py           # 200 noise seeds multiplicity sweep (Bonferroni evaluation)
+│   ├── effect_size_sweep.py     # Effect size sweep (5%, 10%, 20%, 40% across scenarios 1, 2, 6; 240 runs)
+│   ├── first_run_blind.py       # First-run blind evaluation runner (records raw engine responses before tuning)
+│   ├── run_olist_real_data.py   # Live BigQuery Olist real-data evaluation (primeval-pixel-407210.dbt_project)
+│   └── results/                 # Evaluation JSON artifacts (dated eval runs, blind results, Olist checks)
 └── frontend/
     ├── Dockerfile               # Node.js Next.js container
     ├── package.json             # Frontend dependencies and scripts
@@ -77,7 +123,8 @@ Whence/
     ├── vitest.config.ts         # Vitest testing configuration
     ├── eslint.config.mjs
     ├── scripts/
-    │   └── capture_screenshots.mjs # Automated Playwright light/dark capture
+    │   ├── capture_screenshots.mjs # Automated Playwright light/dark capture
+    │   └── capture_semantic.mjs    # Semantic layer light/dark capture
     ├── public/
     │   └── fonts/               # Self-hosted typography (Section 13)
     │       ├── newsreader-*.woff2    # Newsreader (wordmark & headings)
@@ -89,12 +136,21 @@ Whence/
         │   ├── layout.tsx       # Root layout with font-face definitions
         │   ├── page.tsx         # Real home: Dashboards overview & clean empty state
         │   ├── data/
-        │   │   └── page.tsx     # [Phase 1 - Item 1b] 3-step warehouse connection flow
+        │   │   └── page.tsx     # [Phase 1 - Item 1b/2] Warehouse connection & semantic layer tabs
+        │   ├── dashboards/
+        │   │   └── [id]/
+        │   │       └── page.tsx # [Phase 1 - Item 7] Working dashboard page (5 dynamic charts, date controls, click-to-explain)
         │   └── dev/
         │       └── style/
         │           ├── page.tsx # Dev-only style guide route (404 in production)
         │           └── StyleGuideClient.tsx # Component gallery & palette showcase
         ├── components/
+        │   ├── semantic/
+        │   │   └── SemanticLayerManager.tsx # [Item 2] Dimensions, metrics, custom builder, preview, versioning
+        │   ├── dashboard/       # [Phase 1 - Item 7] Dashboard components
+        │   │   ├── ChartCard.tsx    # Card with metric subtitle, date badge, Chart.js rendering, hover explain, and view SQL modal
+        │   │   ├── ExplainDialog.tsx# Centred modal with live SSE streaming checklist, waterfall chart, category drill, evidence tabs
+        │   │   └── chartConfig.ts   # Chart.js registered controllers, grid colors, and responsive tooltips
         │   ├── ui/              # Accessible base UI primitives
         │   │   ├── button.tsx   # Radix blue11 fill (light) / blue9 (dark) primary button
         │   │   ├── input.tsx    # Accessible text/number input with error states
@@ -107,13 +163,15 @@ Whence/
         │   └── shell/
         │       └── AppShell.tsx # Left navigation rail (56px/220px) & top bar
         ├── lib/
-        │   ├── api.ts           # Type-safe API client for connections and metadata
+        │   ├── api.ts           # Type-safe API client for connections, semantic layer, dashboards, and SSE explain stream
         │   └── utils.ts         # Class merging and formatting utilities
         └── tests/
             ├── setup.ts         # Vitest setup & DOM matchers
             ├── components.test.tsx      # Base UI component unit tests
             ├── connection_flow.test.tsx # [Item 1b] 3-step connection flow unit tests
-            └── loading_states.test.tsx  # [Item 1b] Button loaders, layout skeletons, aria-live, check states
+            ├── loading_states.test.tsx  # [Item 1b] Button loaders, layout skeletons, aria-live, check states
+            ├── semantic_ui.test.tsx     # [Item 2] Semantic layer UI tests (dimensions, metrics, preview)
+            └── dashboard_ui.test.tsx    # [Item 7] Click-to-explain dashboard tests (cards, explain modal, SSE checklist)
 ```
 
 ---
@@ -151,6 +209,17 @@ Whence/
   - Unit-tested and mock-tested (explicitly marked *not live-tested* until live credentials are provided).
 - **`main.py`**:
   - FastAPI server serving health checks (`/api/v1/health`), adapter status, SQL query execution with guardrails, query audit logs, and settings endpoints.
+- **`explain/`**:
+  - `engine.py` & `pipeline.py`: Section 8.2 typed 10-step explanation pipeline (`resolve`, `completeness`, `noise` median/MAD, `seasonality`, `drivers`, `drill` two-way, `data_quality`, `events`, `confidence`, `evidence`).
+  - `contribution.py`: Section 8.3 contribution maths (exact two-point rate/mix split, additive deltas with offsetting effects, low-support segment marking).
+  - Enforces zero web or LLM imports (verified by AST test `test_explain_imports.py`).
+- **`narrative/`**:
+  - `client.py`: Provider-agnostic LLM client (Google Gemini REST, OpenAI-compatible / OpenRouter). Enforces daily token cap and disables redundant chain-of-thought reasoning tokens (`reasoning: {"max_tokens": 0}`) for sub-second responses.
+  - `checker.py`: Strict post-generation `NumberChecker` verifying every figure (signed and absolute) and named segment exists in `Evidence` within tolerance before returning.
+  - `fallback.py`: Deterministic fallback templates generating verified narrative without LLM on missing keys or validation failure.
+- **`dashboards/`**:
+  - `service.py`: Generates the 5 demo ecommerce charts from the semantic layer with dynamic warehouse compilation (DuckDB or BigQuery `thelook_ecommerce`), in-memory session caching, and SSE streaming pipeline (`stream_explain`).
+  - `router.py`: REST routes (`/api/v1/dashboards`) for dashboard CRUD, chart execution (`/charts/{id}/run`), and Server-Sent Events explain stream (`/charts/{id}/explain`).
 
 ### 2.2 Frontend Modules (`frontend/src/`)
 
@@ -158,7 +227,13 @@ Whence/
   - Pure CSS variables mapped to `@radix-ui/colors` (Slate neutral scale 1-12, Blue accent scale, Green/Red trend indicators, Tableau 10 series colors, and dedicated `#59A14F` / `#E15759` waterfall colors).
   - Explicit font-family utility classes (`font-newsreader`, `font-instrument`, `font-jetbrains`) and tabular numerals (`tabular-nums`).
 - **`app/page.tsx`**:
-  - Real Dashboards home page. When no dashboards exist, renders a clean one-sentence empty state: *"Connect a data source to build your first dashboard"* with a single button.
+  - Real Dashboards home page listing saved dashboards with source badges, chart count, creation dates, and empty state with single CTA.
+- **`app/dashboards/[id]/page.tsx`**:
+  - Live dashboard page rendering the 5 dynamic chart cards in a responsive grid, real date filter controls, "View SQL" inspection dialog, and click-to-explain triggers.
+- **`components/dashboard/`**:
+  - `ChartCard.tsx`: Chart container rendering Chart.js canvas (line, bar, stacked bar, KPI tile, scatter), hover explain button, keyboard focus, and SQL preview modal.
+  - `ExplainDialog.tsx`: Centred Radix Dialog with live SSE progress checklist, side-by-side comparison chart, interactive driver waterfall, breadcrumb drill-down, and Evidence/Data checks tabs.
+  - `chartConfig.ts`: Chart.js global defaults, auto-scaling, tabular numerals, and responsive tooltips.
 - **`app/dev/style/`**:
   - Developer-only design system showcase (`/dev/style`).
   - Gated server-side: returns 404 in production when `ENABLE_STYLE_GUIDE` is not set.

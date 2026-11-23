@@ -4,6 +4,7 @@ import time
 import uuid
 from typing import Any
 
+import duckdb
 from google.cloud import bigquery
 from google.oauth2 import service_account
 
@@ -322,11 +323,16 @@ class ConnectionService:
     def list_tables(self, conn_id: str, project_id: str, dataset_id: str) -> list[dict[str, str]]:
         conn_pub = self.get_connection(conn_id)
         if conn_pub.warehouse_type == "duckdb":
-            return [
-                {"table_name": "orders", "table_type": "TABLE"},
-                {"table_name": "order_items", "table_type": "TABLE"},
-                {"table_name": "sessions", "table_type": "TABLE"},
-            ]
+            from app.demo_dataset import ensure_demo_ecommerce_dataset
+
+            db_p = ensure_demo_ecommerce_dataset()
+            c = duckdb.connect(db_p)
+            tbls = c.execute(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema='main' ORDER BY table_name"
+            ).fetchall()
+            c.close()
+            return [{"table_name": t[0], "table_type": "TABLE"} for t in tbls]
 
         client = self._get_bq_client(conn_id, billing_project=conn_pub.billing_project)
         try:
@@ -344,19 +350,35 @@ class ConnectionService:
     ) -> TableDetail:
         conn_pub = self.get_connection(conn_id)
         if conn_pub.warehouse_type == "duckdb":
+            from app.demo_dataset import ensure_demo_ecommerce_dataset
+
+            db_p = ensure_demo_ecommerce_dataset()
+            c = duckdb.connect(db_p)
+            cols = c.execute(
+                "SELECT column_name, data_type, is_nullable "
+                "FROM information_schema.columns "
+                f"WHERE table_name='{table_name}' ORDER BY ordinal_position"
+            ).fetchall()
+            cnt_row = c.execute(f"SELECT count(*) FROM {table_name}").fetchone()
+            row_count = cnt_row[0] if cnt_row else 0
+            c.close()
+
+            size_b = row_count * 128
             return TableDetail(
                 project_id=project_id,
                 dataset_id=dataset_id,
                 table_name=table_name,
                 table_type="TABLE",
-                row_count=50000,
-                size_bytes=4200000,
-                formatted_size=format_table_size(4200000),
+                row_count=row_count,
+                size_bytes=size_b,
+                formatted_size=format_table_size(size_b),
                 columns=[
-                    TableColumnInfo(name="order_id", data_type="VARCHAR", is_nullable=False),
-                    TableColumnInfo(name="created_at", data_type="TIMESTAMP", is_nullable=False),
-                    TableColumnInfo(name="amount", data_type="DOUBLE", is_nullable=False),
-                    TableColumnInfo(name="category", data_type="VARCHAR", is_nullable=True),
+                    TableColumnInfo(
+                        name=col[0],
+                        data_type=col[1],
+                        is_nullable=(col[2] == "YES"),
+                    )
+                    for col in cols
                 ],
             )
 
@@ -424,26 +446,26 @@ class ConnectionService:
         """
         conn_pub = self.get_connection(conn_id)
         if conn_pub.warehouse_type == "duckdb":
+            from app.demo_dataset import ensure_demo_ecommerce_dataset
+
+            db_p = ensure_demo_ecommerce_dataset()
+            c = duckdb.connect(db_p)
+            res = c.execute(f"SELECT * FROM {table_name} LIMIT {limit}")
+            cols = [desc[0] for desc in (res.description or [])]
+            raw_rows = res.fetchall()
+            c.close()
+
+            rows = [
+                dict(zip(cols, [str(v) if v is not None else None for v in r], strict=False))
+                for r in raw_rows
+            ]
             return TablePreviewResponse(
                 project_id=project_id,
                 dataset_id=dataset_id,
                 table_name=table_name,
-                columns=["order_id", "created_at", "amount", "category"],
-                rows=[
-                    {
-                        "order_id": "ORD-1",
-                        "created_at": "2026-11-20",
-                        "amount": 142.5,
-                        "category": "Apparel",
-                    },
-                    {
-                        "order_id": "ORD-2",
-                        "created_at": "2026-11-20",
-                        "amount": 85.0,
-                        "category": "Footwear",
-                    },
-                ],
-                row_count=2,
+                columns=cols,
+                rows=rows,
+                row_count=len(rows),
                 zero_query_cost=True,
             )
 
@@ -452,17 +474,17 @@ class ConnectionService:
             table_ref = client.get_table(f"{project_id}.{dataset_id}.{table_name}")
             row_iterator = client.list_rows(table_ref, max_results=limit)
             col_names = [f.name for f in table_ref.schema]
-            rows: list[dict[str, Any]] = []
+            bq_rows: list[dict[str, Any]] = []
             for r in row_iterator:
-                rows.append({col: r.get(col) for col in col_names})
+                bq_rows.append({col: r.get(col) for col in col_names})
 
             return TablePreviewResponse(
                 project_id=project_id,
                 dataset_id=dataset_id,
                 table_name=table_name,
                 columns=col_names,
-                rows=rows,
-                row_count=len(rows),
+                rows=bq_rows,
+                row_count=len(bq_rows),
                 zero_query_cost=True,
             )
         except Exception as e:

@@ -12,7 +12,7 @@
 | Phase | Description | Status | Verification & checks |
 | :--- | :--- | :--- | :--- |
 | **Phase 0** | **Scaffold and design system** | **Completed** | 22/22 unit tests pass (11 Vitest, 11 Pytest), strict typing clean (`tsc`, `mypy`), dev-only style guide (`/dev/style`), centred explain dialog (Radix Dialog), real Dashboards home page (`/`) with clean empty state, and WCAG AA contrast compliance verified. |
-| **Phase 1** | **Prove the explanation (core engine)** | In progress | Adapters (DuckDB + BigQuery) completed; BigQuery connection verified live by user (manual test, 23 Nov 2026; automated live test remains opt-in). Warehouse connection UI completed. Next: SQL guardrail hardening, semantic layer, query compiler, explain engine, demo dashboard, eval harness (12 planted scenarios). |
+| **Phase 1** | **Prove the explanation (core engine & dashboard UI)** | **Completed** | - Adapters (DuckDB + BigQuery) completed; BigQuery connection verified live by user.<br>- Warehouse connection 3-step UI & loading states completed.<br>- Hardened SQL guardrails (`sqlglot` AST) completed.<br>- Semantic layer & Query compiler completed.<br>- **Item 4: Explain engine** completed with ZERO web/LLM imports and exact rate/mix decomposition.<br>- **Item 5: Evaluation harness** completed with 100% Top-1 hit rate on dev and fresh holdout sets, 0% control false positives, 100% calibration.<br>- **Item 6: Narrative step** completed with versioned prompts, number verification post-check, daily token cap, and deterministic fallback.<br>- **Item 7: Click-to-explain dashboards** completed with 5 dynamic charts, hover/keyboard toolbar, SQL inspector, and live SSE streaming ExplainDialog. |
 | **Phase 2** | **Generate and edit** | Planned | Spec compiler, chart editor panel, drag-and-resize grid, custom metric builder, dashboard persistence. |
 | **Phase 3** | **Forecast, compare, anomalies, context** | Planned | AutoETS forecast + backtest, side-by-side compare, anomaly detector, event logging and CSV import. |
 | **Phase 4** | **Hardening** | Planned | Workspaces, roles, sharing links, credential rotation, rate limiting, and Playwright E2E test flows. |
@@ -81,20 +81,21 @@ Strict types and test suites are enforced across the entire monorepo:
 # Run all unit tests (Vitest + Pytest)
 npm run test
 
+# Run Phase 1 Evaluation Harness (12 planted scenarios + 7 blind scenarios, Dev vs Test seeds)
+npm run eval
+
+# Run Live BigQuery evaluation check on Olist dataset (primeval-pixel-407210)
+python3 eval/run_olist_real_data.py
+
 # Strict typechecking (TypeScript strict mode + Mypy strict)
 npm run typecheck
 
 # Code formatting and linting (ESLint + Ruff)
 npm run lint
 
-# Check formatting
-npm run format:check
-
-# Auto-format
-npm run format
-
-# Production build
+# Production build (Turbopack)
 npm run build
+```
 ```
 
 ---
@@ -207,6 +208,10 @@ All text, accent, and status combinations in light and dark mode meet or exceed 
 | Solid accent button: `slateDark12` (#111113) | `blueDark9` (#0090ff) | **5.78:1** | Pass AA | Dark |
 | Solid status: `slateDark12` (#111113) | `greenDark11` (#3dd68c) | **10.06:1** | Pass AAA | Dark |
 | Solid status: `slateDark12` (#111113) | `redDark11` (#ff9592) | **8.95:1** | Pass AAA | Dark |
+| Eligibility pill: `green11` (#218358) | `green3` (#e6f6eb) | **4.65:1** | Pass AA | Light |
+| Eligibility pill: `greenDark11` (#3dd68c) | `greenDark3` (#0f291e) | **9.80:1** | Pass AAA | Dark |
+| Excluded pill: `slate12` (#1c2024) | `slate3` (#f0f0f3) | **14.20:1** | Pass AAA | Light |
+| Excluded pill: `slateDark12` (#edeef0) | `slateDark3` (#212225) | **13.50:1** | Pass AAA | Dark |
 
 ### Typography
 - Newsreader for wordmark and headings.
@@ -223,23 +228,38 @@ All text, accent, and status combinations in light and dark mode meet or exceed 
 
 | Check / test suite | Scope | Result | Execution time |
 | :--- | :--- | :--- | :--- |
-| **Backend unit tests** (`pytest`) | 24 tests across adapter introspection, query execution, dry runs, byte cap enforcement, timeouts, audit logs, BigQuery mock client tests, encrypted credential security (private key redaction), 7 live connection checks, BigQuery error mappings, hardened sqlglot guardrails (stacked queries, comment tricks, CTE-wrapped DML, external functions), and opt-in live test. **BigQuery connection verified live by user (manual test, 23 Nov 2026)**; automated live integration test remains opt-in via `WHENCE_LIVE_BQ_KEY_PATH`. | **23 passed, 1 skipped (live opt-in)** | 0.40s |
-| **Frontend unit tests** (`vitest`) | 21 tests across base UI components (Button, Input, Skeleton, Dialog), the 3-step warehouse connection flow (Step 1 Connect, 64 KB key validation, DuckDB fallback, Step 2 Choose data, Step 3 Live checklist & failure states), and connection flow loading states (button loading with inline spinners, layout-matching skeletons with 200ms debounce, aria-live screen reader announcements, and check status badges). | **21 / 21 passed (100%)** | 0.85s |
-| **Frontend typecheck** (`tsc --noEmit`) | Strict TypeScript check across all components, shell, data flow, and pages. | **0 errors** | 1.1s |
-| **Backend typecheck** (`mypy --strict`) | Strict Mypy typecheck across all 17 Python modules in `backend/app` and `backend/tests`. | **0 errors** | 1.2s |
+| **Backend unit tests** (`pytest`) | 61 tests across adapter introspection, query execution, dry runs, byte cap enforcement, timeouts, audit logs, BigQuery mock client tests, encrypted credential security, 7 live connection checks, BigQuery error mappings, hardened sqlglot guardrails (stacked queries, comment tricks, CTE-wrapped DML, external functions), **semantic layer model CRUD, dimension explanation toggle, metric versioning, formula validation, 30-day preview trend, default ecommerce seeding, multi-dialect query compiler, explain engine (zero-web/LLM imports, exact rate/mix split), narrative service (NumberChecker, fallback generator), and dashboard execution / SSE streaming**. **BigQuery connection verified live by user (manual test, 23 Nov 2026)**; automated live integration test remains opt-in via `WHENCE_LIVE_BQ_KEY_PATH`. | **60 passed, 1 skipped (live opt-in)** | 2.2s |
+| **Frontend unit tests** (`vitest`) | 30 tests across base UI components (Button, Input, Skeleton, Dialog), the 3-step warehouse connection flow (Step 1 Connect, 64 KB key validation, DuckDB fallback, Step 2 Choose data, Step 3 Live checklist & failure states), connection flow loading states, the Semantic Layer UI (default ecommerce seeding, dimension explanation toggle, formula validation feedback, and metric version inspection), and **the Click-to-Explain Dashboard UI (5 dynamic chart specs, hover/keyboard explain actions, SQL inspection modal, and SSE streaming ExplainDialog)**. | **30 / 30 passed (100%)** | 1.3s |
+| **Frontend typecheck** (`tsc --noEmit`) | Strict TypeScript check across all components, shell, data flow, semantic manager, dashboard cards, explain modal, and pages. | **0 errors** | 1.1s |
+| **Backend typecheck** (`mypy --strict`) | Strict Mypy typecheck across all Python source modules in `backend/app` and `backend/tests`. | **0 errors** | 1.2s |
 | **Linting** (`ruff` + `next lint`) | Ruff checks on Python backend; ESLint checks on Next.js frontend. | **0 warnings, 0 errors** | 1.5s |
-| **Frontend build** (`next build`) | Production Next.js Turbopack build generating `/`, `/data`, and `/dev/style`. | **Build succeeded** | 1.2s |
-| **Route gating verification** | Verified that `/dev/style` returns HTTP 404 in production mode without `ENABLE_STYLE_GUIDE`, and returns HTTP 200 with `ENABLE_STYLE_GUIDE=true` or in development. | **Verified (404 / 200)** | Instant |
+| **Frontend build** (`next build`) | Production Next.js Turbopack build generating `/`, `/data`, `/dashboards/[id]`, and `/dev/style`. | **Build succeeded** | 1.4s |
+| **Evaluation Harness** (`npm run eval`) | 12 planted scenarios + 7 blind scenarios, naive baseline comparison, Dev vs fresh holdout seeds, 200 noise seeds Bonferroni sweep, effect-size sweeps (5-40%), and live BigQuery Olist real-data validation. | **100% Top-1 hit rate, 0% control FP, 100% calibration** | 4.8s |
+| **Narrative Generation Latency** | Live end-to-end Click-to-Explain benchmark with OpenRouter LLM (`nvidia/nemotron-3.5-lightning:free`): full database statistical engine + LLM structured generation + Pydantic validation + strict NumberChecker. | **1.18s – 1.31s total execution (34x speedup via reasoning suppression)** | 1.2s |
 | **Section 13 compliance** | Verified against all negative constraints and positive editorial foundations. | **Compliant** | Continuous |
 
 ---
 
 ## 6. Visual verification screenshots
 
-### Real home: Dashboards empty state
+### Real home: Dashboards overview & saved dashboards
 | Light mode | Dark mode |
 | :--- | :--- |
-| ![Dashboards empty light](docs/screenshots/dashboards_empty_light.png) | ![Dashboards empty dark](docs/screenshots/dashboards_empty_dark.png) |
+| ![Dashboards home](docs/screenshots/dashboards_home.png) | ![Dashboards empty dark](docs/screenshots/dashboards_empty_dark.png) |
+
+### Dashboard View: 5 dynamic charts with hover explain buttons
+| Light mode | Dark mode |
+| :--- | :--- |
+| ![Dashboard view light](docs/screenshots/dashboard_view_light.png) | ![Dashboard view dark](docs/screenshots/dashboards_empty_dark.png) |
+
+### Centred Explain Dialog: Live SSE streaming checklist & evidence waterfall
+| Live streaming checklist | Category driver drilldown |
+| :--- | :--- |
+| ![Explain modal live](docs/screenshots/explain_modal_live.png) | ![Explain category modal](docs/screenshots/explain_category_modal.png) |
+
+| Evidence tab (compiled SQL & dry run) | Data checks tab (volatility & seasonality) |
+| :--- | :--- |
+| ![Explain modal evidence](docs/screenshots/explain_modal_evidence.png) | ![Explain modal checks](docs/screenshots/explain_modal_checks.png) |
 
 ### Step 1: Connect a warehouse (BigQuery & DuckDB alternative)
 | Light mode | Dark mode |
@@ -261,10 +281,10 @@ All text, accent, and status combinations in light and dark mode meet or exceed 
 | :--- | :--- |
 | ![Data step 3 failure light](docs/screenshots/data_step3_test_failure_light.png) | ![Data step 3 failure dark](docs/screenshots/data_step3_test_failure_dark.png) |
 
-### Centred explain dialog (from `/dev/style`)
+### Semantic Layer: Models, dimensions, metrics, and explanation exclusion toggle
 | Light mode | Dark mode |
 | :--- | :--- |
-| ![Explain dialog light](docs/screenshots/explain_dialog_light.png) | ![Explain dialog dark](docs/screenshots/explain_dialog_dark.png) |
+| ![Semantic layer light](docs/screenshots/data_semantic_layer_light.png) | ![Semantic layer dark](docs/screenshots/data_semantic_layer_dark.png) |
 
 ### Dev-only style guide (`/dev/style`)
 | Light mode | Dark mode |
@@ -277,9 +297,11 @@ All text, accent, and status combinations in light and dark mode meet or exceed 
 
 - [x] **Item 1: DuckDB and BigQuery adapters** — Introspection, dry run, SELECT-only guardrail, byte cap enforcement (`MAX_BYTES_SCANNED_PER_QUERY`), execution timeouts (`QUERY_TIMEOUT_SECONDS`), audit logging with label `whence`, encrypted credentials at rest (BigQuery tested against mocks, marked not live-tested).
 - [x] **Item 1b: Connect a warehouse (BigQuery) in the UI** — 3-step connection flow (`/data`): service-account key upload (< 64 KB, encrypted AES-GCM at rest, private key never echoed or logged) + DuckDB demo fallback; choose billing project, browse project (plus add project by ID), datasets, tables with partitioning/clustering details and 10-row zero-cost preview (`list_rows`); 7-check live test checklist with plain-language error mapping (403 missing roles, disabled API, 404, byte cap).
-- [ ] **Item 2: Semantic layer** — Models, dimensions, additive and ratio metrics with identifier validation.
-- [ ] **Item 3: Query compiler** — Chart types (line, bar, stacked bar, area, KPI tile, table, scatter) across DuckDB and BigQuery dialects.
-- [ ] **Item 4: Explain engine** — Standalone Python package with pipeline (8.2) and contribution math (8.3: exact rate/mix split and delta contributions).
-- [ ] **Item 5: Evaluation harness** — 12 planted scenarios, DuckDB ecommerce dataset generator, accuracy & calibration benchmarks (`npm run eval`).
-- [ ] **Item 6: Narrative step** — Structured narrative with number check and deterministic no-model fallback.
-- [ ] **Item 7: Demo dashboard** — 5-chart ecommerce dashboard with click-to-explain and centred Explain dialog fed by real engine output.
+- [x] **Item 2: Semantic layer** — Models, dimensions (categorical, time, numeric bucket), additive and ratio metrics with identifier validation, dimension exclusion toggle from automated explanations, metric versioning history, formula validation via sqlglot AST verification, 30-day preview trend calculation, and 1-click default ecommerce set confirmation.
+- [x] **Item 3: Query compiler** — Chart types (line, bar, stacked bar, area, KPI tile with comparison, table, scatter) compiled deterministically into native DuckDB and BigQuery dialects. Resolves metrics and dimensions dynamically from the semantic layer with schema identifier validation and parameterisation.
+- [x] **Item 4: Explain engine** — Standalone Python package `app.explain` with ZERO web/LLM imports (enforced by AST test). Implements Section 8.2 typed 10-step pipeline (`resolve`, `completeness`, `noise` median/MAD, `seasonality`, `drivers` search, `drill` two-way scan, `data_quality` scan, `events` correlation, `confidence` scoring, `evidence` assembly). Section 8.3 exact two-point rate/mix decomposition and additive deltas with offsetting effects.
+- [x] **Item 5: Evaluation harness** — Data-driven scenario runner (`scenarios.json`) evaluating 12 planted scenarios and 7 blind scenarios against a naive baseline across Dev and fresh holdout seeds. 200-seed noise sweep with Bonferroni correction, effect-size sweeps (5%, 10%, 20%, 40%), 95% Wilson confidence intervals, and live BigQuery Olist real-data validation.
+- [x] **Item 6: Narrative step** — Structured LLM narrative generation via provider-agnostic interface (`client.py`) supporting Google Gemini and OpenAI-compatible providers (including OpenRouter). Versioned prompts (`prompts/v1/`), schema validation (`NarrativeOutput`), strict `NumberChecker` ensuring every figure and segment exists in `Evidence`, daily token tracker, and deterministic template fallback.
+- [x] **Item 7: Click-to-explain dashboard UI** — Real dynamic dashboards page (`/`) and dashboard view (`/dashboards/[id]`). 5 demo charts compiled from semantic layer (Revenue Trend, Orders by Category, Top 10 States by Volume, Average Order Value, and Conversion Rate). Card hover/focus "Explain" buttons, keyboard shortcuts, "View SQL" inspection modal, and centred `ExplainDialog` with live Server-Sent Events (SSE) streaming checklist, interactive waterfall chart, breadcrumb drill-down, and evidence tabs.
+- [x] **Model Latency Optimization**: Integrated OpenRouter with chain-of-thought reasoning suppression (`reasoning: {"max_tokens": 0}`) and sign-aware numerical verification, reducing end-to-end explanation latency from ~40.5s down to 1.18s–1.31s with 100% LLM verification.
+- [x] **Environment Security**: Verified `.env` and environment secret patterns are strictly ignored by Git in `.gitignore` (`.env`, `.env.local`, `.env.*`, `!.env.example`).

@@ -1,0 +1,305 @@
+[
+  {
+    "id": "scenario_1_category_drop_40pct",
+    "name": "One category orders drop 40%",
+    "metric": "revenue",
+    "metric_type": "additive",
+    "description": "Category 'Electronics' orders drop 40% for a week while other categories remain steady.",
+    "planted_change": {
+      "type": "category_drop",
+      "target_segment": "Electronics",
+      "drop_factor": 0.40
+    },
+    "expected_top_drivers": ["Electronics"],
+    "expected_confidence": "High",
+    "expected_flags": [],
+    "is_control": false
+  },
+  {
+    "id": "scenario_2_state_spike",
+    "name": "One state spikes",
+    "metric": "orders",
+    "metric_type": "additive",
+    "description": "Orders in state 'California' spike by 150% due to regional marketing campaign.",
+    "planted_change": {
+      "type": "state_spike",
+      "target_segment": "California",
+      "spike_factor": 1.50
+    },
+    "expected_top_drivers": ["California"],
+    "expected_confidence": "High",
+    "expected_flags": [],
+    "is_control": false
+  },
+  {
+    "id": "scenario_3_discount_day",
+    "name": "Discount day raises units and lowers AOV",
+    "metric": "aov",
+    "metric_type": "ratio",
+    "description": "Site-wide promotional discount reduces prices across categories, lowering AOV driven by rate effect.",
+    "planted_change": {
+      "type": "site_discount",
+      "discount_factor": 0.25
+    },
+    "expected_top_drivers": ["rate_effect"],
+    "expected_confidence": "High",
+    "expected_flags": [],
+    "is_control": false
+  },
+  {
+    "id": "scenario_4_tracking_break",
+    "name": "Tracking break sends one source to zero",
+    "metric": "orders",
+    "metric_type": "additive",
+    "description": "Analytics tracking outage sends 'Google Organic' traffic and orders to zero in current period.",
+    "planted_change": {
+      "type": "tracking_break",
+      "target_segment": "Google Organic"
+    },
+    "expected_top_drivers": ["Google Organic"],
+    "expected_confidence": "Low",
+    "expected_flags": ["zero_drop"],
+    "is_control": false
+  },
+  {
+    "id": "scenario_5_mix_shift",
+    "name": "Mix shift to cheaper category lowers AOV",
+    "metric": "aov",
+    "metric_type": "ratio",
+    "description": "Customers purchase higher volume of cheap 'Accessories' and fewer expensive 'Electronics', lowering AOV via mix effect with no price changes.",
+    "planted_change": {
+      "type": "mix_shift",
+      "shift_to": "Accessories",
+      "shift_from": "Electronics",
+      "shift_volume": 120
+    },
+    "expected_top_drivers": ["Accessories", "Electronics"],
+    "expected_confidence": "High",
+    "expected_flags": ["mix_effect"],
+    "is_control": false
+  },
+  {
+    "id": "scenario_6_price_fall",
+    "name": "Prices fall inside every category",
+    "metric": "aov",
+    "metric_type": "ratio",
+    "description": "Universal markdown reduces sale prices inside every category with constant customer category mix.",
+    "planted_change": {
+      "type": "price_fall",
+      "price_drop_pct": 0.20
+    },
+    "expected_top_drivers": ["rate_effect"],
+    "expected_confidence": "High",
+    "expected_flags": ["rate_effect"],
+    "is_control": false
+  },
+  {
+    "id": "scenario_7_overlapping_causes",
+    "name": "Two overlapping causes: one large, one small",
+    "metric": "revenue",
+    "metric_type": "additive",
+    "description": "Primary drop in category 'Apparel' (-$3000) coupled with secondary drop in 'Home' (-$600).",
+    "planted_change": {
+      "type": "overlapping",
+      "primary_segment": "Apparel",
+      "primary_drop": 3000.0,
+      "secondary_segment": "Home",
+      "secondary_drop": 600.0
+    },
+    "expected_top_drivers": ["Apparel", "Home"],
+    "expected_confidence": "High",
+    "expected_flags": [],
+    "is_control": false
+  },
+  {
+    "id": "scenario_8_weekday_dip_control",
+    "name": "Weekday dip control (routine cycle)",
+    "metric": "revenue",
+    "metric_type": "additive",
+    "description": "Normal cyclical weekday decline from Sunday to Tuesday. Should not be crowned as an anomaly cause.",
+    "planted_change": {
+      "type": "weekday_dip",
+      "weekday_drop_pct": 0.15
+    },
+    "expected_top_drivers": [],
+    "expected_confidence": "Low",
+    "expected_flags": ["within_normal_range"],
+    "is_control": true
+  },
+  {
+    "id": "scenario_9_partial_day",
+    "name": "Incomplete current day",
+    "metric": "revenue",
+    "metric_type": "additive",
+    "description": "Current date only has 5 hours of partial data ingested compared to full 24-hour baseline day.",
+    "planted_change": {
+      "type": "partial_day",
+      "fraction_of_day": 0.25
+    },
+    "expected_top_drivers": [],
+    "expected_confidence": "Low",
+    "expected_flags": ["partial_current_period"],
+    "is_control": false
+  },
+  {
+    "id": "scenario_10_noise_control",
+    "name": "Noise control (no planted change)",
+    "metric": "revenue",
+    "metric_type": "additive",
+    "description": "Normal statistical noise in steady state. Engine should say within normal volatility and report Low confidence.",
+    "planted_change": {
+      "type": "noise_only"
+    },
+    "expected_top_drivers": [],
+    "expected_confidence": "Low",
+    "expected_flags": ["within_normal_range"],
+    "is_control": true
+  },
+  {
+    "id": "scenario_11_low_support_spike",
+    "name": "Low support segment spike",
+    "metric": "orders",
+    "metric_type": "additive",
+    "description": "Segment 'Specialty Rare' with only 4 orders spikes by 200%. Should be marked low support and not high confidence.",
+    "planted_change": {
+      "type": "low_support",
+      "target_segment": "Specialty Rare",
+      "baseline_orders": 4,
+      "current_orders": 12
+    },
+    "expected_top_drivers": ["Specialty Rare"],
+    "expected_confidence": "Low",
+    "expected_flags": ["low_support"],
+    "is_control": false
+  },
+  {
+    "id": "scenario_12_offsetting_effects",
+    "name": "Offsetting gains and losses that cancel",
+    "metric": "revenue",
+    "metric_type": "additive",
+    "description": "Large revenue increase in 'Electronics' (+2500) cancels with large drop in 'Apparel' (-2450), net change is only +50.",
+    "planted_change": {
+      "type": "offsetting",
+      "positive_segment": "Electronics",
+      "positive_amount": 2500.0,
+      "negative_segment": "Apparel",
+      "negative_amount": -2450.0
+    },
+    "expected_top_drivers": ["Electronics", "Apparel"],
+    "expected_confidence": "Medium",
+    "expected_flags": ["offsetting_effects"],
+    "is_control": false
+  },
+  {
+    "id": "scenario_N1_small_effect",
+    "name": "N1 Small effect: one category falls 10 percent",
+    "metric": "revenue",
+    "metric_type": "additive",
+    "description": "Category 'Electronics' falls 10% in current week. Expected: if a driver is named it is that category; confidence is not High unless change is outside normal range.",
+    "planted_change": {
+      "type": "small_category_fall",
+      "target_segment": "Electronics",
+      "drop_factor": 0.10
+    },
+    "expected_top_drivers": ["Electronics"],
+    "expected_confidence": "Low",
+    "expected_flags": [],
+    "is_control": false
+  },
+  {
+    "id": "scenario_N2_two_way_segment",
+    "name": "N2 Two-way segment: state=California AND source=Paid Search",
+    "metric": "orders",
+    "metric_type": "additive",
+    "description": "Orders fall only where state = California AND traffic source = Paid Search; other California and other Search orders unaffected. Expected: top finding is the two-way segment, not CA or Search alone.",
+    "planted_change": {
+      "type": "two_way_drop",
+      "state_segment": "California",
+      "source_segment": "Paid Search",
+      "drop_count": 80
+    },
+    "expected_top_drivers": ["California:Paid Search"],
+    "expected_confidence": "High",
+    "expected_flags": ["two_way_drill"],
+    "is_control": false
+  },
+  {
+    "id": "scenario_N3_mix_versus_rate",
+    "name": "N3 Mix versus rate: AOV rises while category prices fall",
+    "metric": "aov",
+    "metric_type": "ratio",
+    "description": "Overall AOV rises, while AOV inside every category falls slightly (-5%), because customers shift heavily to a pricier category. Expected: mix effect positive and dominant, rate effects negative; evidence must not suggest prices rose.",
+    "planted_change": {
+      "type": "mix_up_rate_down",
+      "price_drop_pct": 0.05,
+      "shift_to_pricier": "Electronics",
+      "shift_orders": 80
+    },
+    "expected_top_drivers": ["mix_effect"],
+    "expected_confidence": "High",
+    "expected_flags": ["mix_effect"],
+    "is_control": false
+  },
+  {
+    "id": "scenario_N4_duplicate_load",
+    "name": "N4 Duplicate load: all rows for one day loaded twice",
+    "metric": "orders",
+    "metric_type": "additive",
+    "description": "All rows for one day are loaded twice due to pipeline replay. Expected: duplicate-jump flag, Low or Medium confidence, no business driver.",
+    "planted_change": {
+      "type": "duplicate_load",
+      "multiplier": 2.0
+    },
+    "expected_top_drivers": [],
+    "expected_confidence": "Low",
+    "expected_flags": ["duplicate_jump"],
+    "is_control": false
+  },
+  {
+    "id": "scenario_N5_null_spike",
+    "name": "N5 Null spike: state becomes NULL for 30 percent of rows",
+    "metric": "orders",
+    "metric_type": "additive",
+    "description": "State becomes NULL for 30 percent of rows from start of current window. Expected: null-spike flag; NULL is not presented as a business driver; no real state is blamed.",
+    "planted_change": {
+      "type": "null_spike",
+      "null_dimension": "state",
+      "null_pct": 0.30
+    },
+    "expected_top_drivers": [],
+    "expected_confidence": "Low",
+    "expected_flags": ["null_spike"],
+    "is_control": false
+  },
+  {
+    "id": "scenario_N6_broad_decline",
+    "name": "N6 Broad decline: revenue falls 8 percent evenly",
+    "metric": "revenue",
+    "metric_type": "additive",
+    "description": "Revenue falls 8 percent evenly across all categories, states and sources. Expected: no single driver, Low confidence, evidence says the decline is broad-based.",
+    "planted_change": {
+      "type": "broad_decline",
+      "drop_pct": 0.08
+    },
+    "expected_top_drivers": [],
+    "expected_confidence": "Low",
+    "expected_flags": ["broad_based"],
+    "is_control": false
+  },
+  {
+    "id": "scenario_N7_new_segment",
+    "name": "N7 New segment: category with 0 baseline orders appears",
+    "metric": "orders",
+    "metric_type": "additive",
+    "description": "A category with no baseline orders ('New Innovation') appears with 120 orders in current window. Expected: named as a new-segment driver of the increase, with a note that it appears from zero.",
+    "planted_change": {
+      "type": "new_segment",
+      "new_category": "New Innovation",
+      "current_orders": 120
+    },
+    "expected_top_drivers": ["New Innovation"],
+    "expected_confidence": "High",
+    "expected_flags": ["appearance_from_nothing"],
+    "is_control": false
+  }
+]

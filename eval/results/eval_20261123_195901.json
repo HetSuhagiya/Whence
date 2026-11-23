@@ -1,0 +1,260 @@
+{
+  "timestamp": "20261123_195901",
+  "scenarios_count": 12,
+  "development_set": {
+    "set_name": "Development Set (Tuning)",
+    "seeds": [
+      42,
+      101,
+      2024
+    ],
+    "total_runs": 36,
+    "engine_top1_rate": 1.0,
+    "engine_top3_rate": 1.0,
+    "baseline_top1_rate": 0.5,
+    "baseline_top3_rate": 0.5,
+    "control_false_positive_rate": 0.0,
+    "calibration_high_conf_accuracy": 1.0,
+    "partial_day_accuracy": 1.0,
+    "low_support_accuracy": 1.0,
+    "offsetting_effects_accuracy": 1.0,
+    "scenario_results": [
+      {
+        "id": "scenario_1_category_drop_40pct",
+        "name": "One category orders drop 40%",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 1.0,
+        "expected_confidence": "High"
+      },
+      {
+        "id": "scenario_2_state_spike",
+        "name": "One state spikes",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 1.0,
+        "expected_confidence": "High"
+      },
+      {
+        "id": "scenario_3_discount_day",
+        "name": "Discount day raises units and lowers AOV",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 0.0,
+        "expected_confidence": "High"
+      },
+      {
+        "id": "scenario_4_tracking_break",
+        "name": "Tracking break sends one source to zero",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 1.0,
+        "expected_confidence": "Low"
+      },
+      {
+        "id": "scenario_5_mix_shift",
+        "name": "Mix shift to cheaper category lowers AOV",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 0.0,
+        "expected_confidence": "High"
+      },
+      {
+        "id": "scenario_6_price_fall",
+        "name": "Prices fall inside every category",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 0.0,
+        "expected_confidence": "High"
+      },
+      {
+        "id": "scenario_7_overlapping_causes",
+        "name": "Two overlapping causes: one large, one small",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 1.0,
+        "expected_confidence": "High"
+      },
+      {
+        "id": "scenario_8_weekday_dip_control",
+        "name": "Weekday dip control (routine cycle)",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 0.0,
+        "expected_confidence": "Low"
+      },
+      {
+        "id": "scenario_9_partial_day",
+        "name": "Incomplete current day",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 0.0,
+        "expected_confidence": "Low"
+      },
+      {
+        "id": "scenario_10_noise_control",
+        "name": "Noise control (no planted change)",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 0.0,
+        "expected_confidence": "Low"
+      },
+      {
+        "id": "scenario_11_low_support_spike",
+        "name": "Low support segment spike",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 1.0,
+        "expected_confidence": "Low"
+      },
+      {
+        "id": "scenario_12_offsetting_effects",
+        "name": "Offsetting gains and losses that cancel",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 1.0,
+        "expected_confidence": "Medium"
+      }
+    ]
+  },
+  "test_set": {
+    "set_name": "Test Set (Hold-out)",
+    "seeds": [
+      999,
+      1337,
+      7777
+    ],
+    "total_runs": 36,
+    "engine_top1_rate": 1.0,
+    "engine_top3_rate": 1.0,
+    "baseline_top1_rate": 0.556,
+    "baseline_top3_rate": 0.556,
+    "control_false_positive_rate": 0.0,
+    "calibration_high_conf_accuracy": 1.0,
+    "partial_day_accuracy": 1.0,
+    "low_support_accuracy": 1.0,
+    "offsetting_effects_accuracy": 1.0,
+    "scenario_results": [
+      {
+        "id": "scenario_1_category_drop_40pct",
+        "name": "One category orders drop 40%",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 1.0,
+        "expected_confidence": "High"
+      },
+      {
+        "id": "scenario_2_state_spike",
+        "name": "One state spikes",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 1.0,
+        "expected_confidence": "High"
+      },
+      {
+        "id": "scenario_3_discount_day",
+        "name": "Discount day raises units and lowers AOV",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 0.0,
+        "expected_confidence": "High"
+      },
+      {
+        "id": "scenario_4_tracking_break",
+        "name": "Tracking break sends one source to zero",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 1.0,
+        "expected_confidence": "Low"
+      },
+      {
+        "id": "scenario_5_mix_shift",
+        "name": "Mix shift to cheaper category lowers AOV",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 0.667,
+        "expected_confidence": "High"
+      },
+      {
+        "id": "scenario_6_price_fall",
+        "name": "Prices fall inside every category",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 0.0,
+        "expected_confidence": "High"
+      },
+      {
+        "id": "scenario_7_overlapping_causes",
+        "name": "Two overlapping causes: one large, one small",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 1.0,
+        "expected_confidence": "High"
+      },
+      {
+        "id": "scenario_8_weekday_dip_control",
+        "name": "Weekday dip control (routine cycle)",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 0.0,
+        "expected_confidence": "Low"
+      },
+      {
+        "id": "scenario_9_partial_day",
+        "name": "Incomplete current day",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 0.0,
+        "expected_confidence": "Low"
+      },
+      {
+        "id": "scenario_10_noise_control",
+        "name": "Noise control (no planted change)",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 0.0,
+        "expected_confidence": "Low"
+      },
+      {
+        "id": "scenario_11_low_support_spike",
+        "name": "Low support segment spike",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 1.0,
+        "expected_confidence": "Low"
+      },
+      {
+        "id": "scenario_12_offsetting_effects",
+        "name": "Offsetting gains and losses that cancel",
+        "runs": 3,
+        "engine_top1_rate": 1.0,
+        "engine_top3_rate": 1.0,
+        "baseline_top1_rate": 1.0,
+        "expected_confidence": "Medium"
+      }
+    ]
+  }
+}

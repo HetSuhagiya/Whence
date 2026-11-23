@@ -291,11 +291,48 @@ def test_sqlglot_hardened_guardrails() -> None:
     # 8. Metric expression validation (Item 2 reuse)
     validate_metric_expression("sum(price * quantity)", dialect="bigquery")
     validate_metric_expression("count(distinct user_id)", dialect="duckdb")
+    validate_metric_expression("SAFE_DIVIDE(sum(sale_price), count(distinct order_id))", dialect="bigquery")
+    validate_metric_expression("sum(sale_price)", allowed_columns=["sale_price", "order_id"])
 
+    # Rule: Multi-statement forbidden
     with pytest.raises(QueryGuardrailError, match="Multi-statement queries are forbidden"):
         validate_metric_expression("sum(price); DROP TABLE users", dialect="duckdb")
 
+    # Rule: Prohibited functions
     with pytest.raises(
-        QueryGuardrailError, match="Prohibited function reaching outside warehouse tables"
+        QueryGuardrailError, match="Prohibited function|not in the allowed metric function list"
     ):
         validate_metric_expression("EXTERNAL_QUERY('c', '1')", dialect="bigquery")
+
+    # Rule: Function allowlist (rejects arbitrary/dangerous functions)
+    with pytest.raises(QueryGuardrailError, match="not in the allowed metric function list"):
+        validate_metric_expression("SYSTEM_USER()", dialect="bigquery")
+
+    with pytest.raises(QueryGuardrailError, match="not in the allowed metric function list"):
+        validate_metric_expression("SLEEP(5)", dialect="duckdb")
+
+    # Rule: No subqueries
+    with pytest.raises(QueryGuardrailError, match="Subqueries are not allowed in metric expressions"):
+        validate_metric_expression("SUM((SELECT sale_price FROM orders))", dialect="duckdb")
+
+    with pytest.raises(QueryGuardrailError, match="Subqueries are not allowed in metric expressions"):
+        validate_metric_expression("(SELECT 1)", dialect="bigquery")
+
+    # Rule: No window functions
+    with pytest.raises(QueryGuardrailError, match="Window functions are not allowed in metric expressions"):
+        validate_metric_expression("SUM(sale_price) OVER (PARTITION BY category)", dialect="duckdb")
+
+    # Rule: Nested aggregations
+    with pytest.raises(QueryGuardrailError, match="Nested aggregations are not allowed"):
+        validate_metric_expression("SUM(AVG(sale_price))", dialect="duckdb")
+
+    with pytest.raises(QueryGuardrailError, match="Nested aggregations are not allowed"):
+        validate_metric_expression("AVG(SUM(sale_price))", dialect="bigquery")
+
+    # Rule: Unknown columns
+    with pytest.raises(QueryGuardrailError, match="Column 'secret_column' is not on the model's table"):
+        validate_metric_expression(
+            "SUM(secret_column)",
+            dialect="duckdb",
+            allowed_columns=["sale_price", "order_id"],
+        )

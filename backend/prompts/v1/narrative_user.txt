@@ -1,0 +1,29 @@
+Metric Analyzed: {metric_name} ({metric_type}: {metric_description})
+Comparison Windows:
+- Baseline window: {baseline_window}
+- Current window: {current_window}
+
+Metric Values:
+- Baseline value: {baseline_value}
+- Current value: {current_value}
+- Absolute delta: {delta_value}
+- Percent change: {percent_change}
+
+Explanation Findings:
+- Confidence rating: {confidence}
+- Confidence reason: {confidence_reason}
+- Top drivers identified:
+{top_drivers_text}
+
+Additional Diagnostics:
+- Offsetting effects: {offsetting_effects}
+- Rate / mix split (if applicable): {rate_mix_text}
+- Data quality flags: {data_quality_flags}
+- Active external events: {events_text}
+
+Produce a JSON response matching the required schema:
+{
+  "headline": "<one single sentence>",
+  "supporting_sentences": ["<sentence 1>", "<sentence 2>", ...],
+  "caveats": ["<caveat 1>", ...]
+}

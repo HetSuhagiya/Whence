@@ -1,0 +1,49 @@
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field
+
+from app.compiler.spec import ChartSpec
+
+
+class DashboardCreate(BaseModel):
+    connection_id: str
+    name: str | None = None
+
+
+class DashboardChartPublic(BaseModel):
+    id: str
+    dashboard_id: str
+    title: str
+    chart_type: str
+    chart_spec: ChartSpec
+    position: int = 0
+    created_at: float
+
+
+class DashboardPublic(BaseModel):
+    id: str
+    name: str
+    connection_id: str
+    connection_name: str
+    warehouse_type: str
+    model_id: str
+    charts: list[DashboardChartPublic] = Field(default_factory=list)
+    created_at: float
+    updated_at: float
+
+
+class ChartRunRequest(BaseModel):
+    date_range: str | dict[str, str] | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    filters: list[dict[str, Any]] | None = None
+
+
+class ExplainRequest(BaseModel):
+    target_point: str | None = None
+    baseline_mode: Literal[
+        "previous_period",
+        "same_weekday_last_week",
+        "same_period_last_year",
+        "trailing_average",
+    ] = "previous_period"

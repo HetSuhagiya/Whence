@@ -8,10 +8,13 @@ from app.adapters.base import QueryGuardrailError, QueryTimeoutError
 from app.adapters.bigquery_adapter import BigQueryAdapter
 from app.adapters.duckdb_adapter import DuckDBAdapter
 from app.audit import audit_logger
+from app.compiler.router import router as compiler_router
 from app.config import get_settings
 from app.connections.router import router as connections_router
 from app.crypto import CredentialCrypto
+from app.dashboards.router import router as dashboards_router
 from app.db import init_db
+from app.semantic.router import router as semantic_router
 
 settings = get_settings()
 
@@ -24,8 +27,11 @@ app = FastAPI(
 # Initialize database tables
 init_db()
 
-# Mount connections router
+# Mount API routers
 app.include_router(connections_router, prefix="/api/v1")
+app.include_router(semantic_router, prefix="/api/v1")
+app.include_router(compiler_router, prefix="/api/v1")
+app.include_router(dashboards_router, prefix="/api/v1")
 
 # CORS middleware for Next.js frontend
 app.add_middleware(
