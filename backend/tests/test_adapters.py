@@ -154,6 +154,38 @@ async def test_bigquery_adapter_with_mock_client() -> None:
 
 
 @pytest.mark.asyncio
+async def test_bigquery_adapter_explicit_location_propagation() -> None:
+    """Verifies BigQueryAdapter receives dataset location and explicitly passes location=self.location to client.query(...)."""
+    mock_client = MagicMock()
+    mock_job = MagicMock()
+    mock_job.total_bytes_processed = 1024
+    mock_job.total_bytes_billed = 1024
+    mock_results = MagicMock()
+    mock_results.schema = []
+    mock_results.__iter__.return_value = []
+    mock_job.result.return_value = mock_results
+    mock_client.query.return_value = mock_job
+
+    bq = BigQueryAdapter(
+        project_id="mock-proj",
+        dataset_id="mock-ds",
+        location="southamerica-east1",
+        client=mock_client,
+    )
+    assert bq.location == "southamerica-east1"
+
+    # Test dry_run passes location
+    await bq.dry_run("SELECT 1")
+    dry_kwargs = mock_client.query.call_args[1]
+    assert dry_kwargs.get("location") == "southamerica-east1"
+
+    # Test run (_execute_query) passes location
+    await bq.run("SELECT 1")
+    run_kwargs = mock_client.query.call_args[1]
+    assert run_kwargs.get("location") == "southamerica-east1"
+
+
+@pytest.mark.asyncio
 async def test_bigquery_adapter_byte_cap_with_mock(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = get_settings()
     monkeypatch.setattr(settings, "MAX_BYTES_SCANNED_PER_QUERY", 1000)
@@ -291,7 +323,9 @@ def test_sqlglot_hardened_guardrails() -> None:
     # 8. Metric expression validation (Item 2 reuse)
     validate_metric_expression("sum(price * quantity)", dialect="bigquery")
     validate_metric_expression("count(distinct user_id)", dialect="duckdb")
-    validate_metric_expression("SAFE_DIVIDE(sum(sale_price), count(distinct order_id))", dialect="bigquery")
+    validate_metric_expression(
+        "SAFE_DIVIDE(sum(sale_price), count(distinct order_id))", dialect="bigquery"
+    )
     validate_metric_expression("sum(sale_price)", allowed_columns=["sale_price", "order_id"])
 
     # Rule: Multi-statement forbidden
@@ -312,14 +346,20 @@ def test_sqlglot_hardened_guardrails() -> None:
         validate_metric_expression("SLEEP(5)", dialect="duckdb")
 
     # Rule: No subqueries
-    with pytest.raises(QueryGuardrailError, match="Subqueries are not allowed in metric expressions"):
+    with pytest.raises(
+        QueryGuardrailError, match="Subqueries are not allowed in metric expressions"
+    ):
         validate_metric_expression("SUM((SELECT sale_price FROM orders))", dialect="duckdb")
 
-    with pytest.raises(QueryGuardrailError, match="Subqueries are not allowed in metric expressions"):
+    with pytest.raises(
+        QueryGuardrailError, match="Subqueries are not allowed in metric expressions"
+    ):
         validate_metric_expression("(SELECT 1)", dialect="bigquery")
 
     # Rule: No window functions
-    with pytest.raises(QueryGuardrailError, match="Window functions are not allowed in metric expressions"):
+    with pytest.raises(
+        QueryGuardrailError, match="Window functions are not allowed in metric expressions"
+    ):
         validate_metric_expression("SUM(sale_price) OVER (PARTITION BY category)", dialect="duckdb")
 
     # Rule: Nested aggregations
@@ -330,7 +370,9 @@ def test_sqlglot_hardened_guardrails() -> None:
         validate_metric_expression("AVG(SUM(sale_price))", dialect="bigquery")
 
     # Rule: Unknown columns
-    with pytest.raises(QueryGuardrailError, match="Column 'secret_column' is not on the model's table"):
+    with pytest.raises(
+        QueryGuardrailError, match="Column 'secret_column' is not on the model's table"
+    ):
         validate_metric_expression(
             "SUM(secret_column)",
             dialect="duckdb",

@@ -108,13 +108,13 @@ class NumberChecker:
             add_num(evidence.noise_check.mad_delta)
             add_num(evidence.noise_check.z_score)
 
-        for issue in (evidence.data_quality_issues or []):
+        for issue in evidence.data_quality_issues or []:
             for m in re.finditer(general_num_pattern, issue.description):
                 parsed = self.parse_numeric_token(m.group(1))
                 if parsed is not None:
                     add_num(parsed)
 
-        for ev in (evidence.context_events or []):
+        for ev in evidence.context_events or []:
             if ev.correlation_note:
                 for m in re.finditer(general_num_pattern, ev.correlation_note):
                     parsed = self.parse_numeric_token(m.group(1))

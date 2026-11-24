@@ -16,6 +16,44 @@ import { ChartRunResult, DashboardChartPublic } from "@/lib/api";
 import { CHART_COLORS, formatMetricValue } from "./chartConfig";
 import { Skeleton } from "@/components/ui/skeleton";
 
+export function toSentenceCase(str: string): string {
+  if (!str) return "";
+  const cleaned = str.replace(/[_-]+/g, " ").trim();
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
+export function mapChartError(rawError: string): { message: string; fix: string } {
+  const lower = rawError.toLowerCase();
+  if (lower.includes("byte") || lower.includes("cap") || lower.includes("bytes scanned") || lower.includes("exceeded")) {
+    return {
+      message: "Query exceeded maximum scanned bytes limit.",
+      fix: "Narrow the date range, select a partition filter, or reduce the number of queried dimensions.",
+    };
+  }
+  if (lower.includes("timeout") || lower.includes("timed out") || lower.includes("deadline")) {
+    return {
+      message: "Query execution timed out.",
+      fix: "Try filtering to a smaller date window or refreshing again in a few moments.",
+    };
+  }
+  if (lower.includes("column") || lower.includes("not found") || lower.includes("does not exist") || lower.includes("no such column")) {
+    return {
+      message: "Required column or field was not found in the table schema.",
+      fix: "Check your semantic model dimensions and metrics on the Data page to verify column expressions.",
+    };
+  }
+  if (lower.includes("syntax") || lower.includes("parse error") || lower.includes("syntax error")) {
+    return {
+      message: "SQL syntax error occurred during warehouse compilation.",
+      fix: "Inspect the compiled SQL below or adjust metric expressions to match warehouse dialect.",
+    };
+  }
+  return {
+    message: "Failed to load chart data from warehouse.",
+    fix: "Review the technical details below or verify warehouse connectivity.",
+  };
+}
+
 interface ChartCardProps {
   chart: DashboardChartPublic;
   runResult: ChartRunResult | null;
@@ -218,11 +256,11 @@ export function ChartCard({
       <div className="flex items-start justify-between gap-2 mb-3">
         <div>
           <h3 className="font-heading text-[15px] font-medium text-[var(--text-main)]">
-            {chart.title}
+            {toSentenceCase(chart.title)}
           </h3>
           <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
-            {chart.chart_spec.metric.toUpperCase()}
-            {chart.chart_spec.dimensions?.length ? ` by ${chart.chart_spec.dimensions.join(", ")}` : " over time"}
+            {toSentenceCase(chart.chart_spec.metric)}
+            {chart.chart_spec.dimensions?.length ? ` by ${chart.chart_spec.dimensions.map(toSentenceCase).join(", ")}` : " over time"}
             {runResult?.date_range ? ` • ${String(runResult.date_range).replace("_", " ")}` : ""}
           </p>
         </div>
@@ -304,9 +342,24 @@ export function ChartCard({
             </div>
           </div>
         ) : error ? (
-          <div className="flex flex-col items-center justify-center h-full p-6 text-center text-[12px] text-[var(--trend-down)]">
-            <p className="font-medium">Failed to load chart data</p>
-            <p className="text-[11px] text-[var(--text-muted)] mt-1">{error}</p>
+          <div className="flex flex-col items-center justify-center h-full p-4 text-center text-[12px] gap-2">
+            <div className="flex flex-col items-center gap-1">
+              <p className="font-semibold text-[var(--trend-down)]" data-testid="chart-error-message">
+                {mapChartError(error).message}
+              </p>
+              <p className="text-[12px] text-[var(--text-muted)] max-w-sm" data-testid="chart-error-fix">
+                <span className="font-medium text-[var(--text-main)]">Actionable fix: </span>
+                {mapChartError(error).fix}
+              </p>
+            </div>
+            <details className="w-full text-left mt-2 border border-[var(--border-hairline)] bg-[var(--bg-subtle)] rounded p-2 text-[11px]">
+              <summary className="font-medium text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer select-none">
+                Show technical details
+              </summary>
+              <pre className="mt-2 p-2 bg-[var(--bg-app)] border border-[var(--border-hairline)] rounded font-mono text-[11px] text-[var(--trend-down)] whitespace-pre-wrap overflow-x-auto max-h-40">
+                {error}
+              </pre>
+            </details>
           </div>
         ) : showDataTable ? (
           /* Accessible Screen Reader Data Table View */

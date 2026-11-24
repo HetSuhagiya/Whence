@@ -10,6 +10,12 @@ class DashboardCreate(BaseModel):
     name: str | None = None
 
 
+class SkippedChartNote(BaseModel):
+    title: str
+    reason: str
+    suggestion: str
+
+
 class DashboardChartPublic(BaseModel):
     id: str
     dashboard_id: str
@@ -27,7 +33,11 @@ class DashboardPublic(BaseModel):
     connection_name: str
     warehouse_type: str
     model_id: str
+    model_name: str | None = None
+    model_description: str | None = None
+    primary_time_column: str | None = None
     charts: list[DashboardChartPublic] = Field(default_factory=list)
+    skipped_charts: list[SkippedChartNote] = Field(default_factory=list)
     created_at: float
     updated_at: float
 

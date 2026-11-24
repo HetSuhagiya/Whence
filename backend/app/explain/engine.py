@@ -108,6 +108,7 @@ class ExplainEngine:
         if top_drill and top_drill.share_of_change >= 0.60:
             two_way_label = ":".join(top_drill.segment_values.values())
             from app.explain.models import DriverContribution
+
             drill_driver = DriverContribution(
                 id=top_drill.id,
                 dimension=" & ".join(top_drill.dimensions),
@@ -147,7 +148,11 @@ class ExplainEngine:
 
         # Detect broad-based decline (no single driver stands out across >= 4 segments)
         is_broad = False
-        if len(drivers) >= 4 and total_delta < 0 and not (top_drill and top_drill.share_of_change >= 0.60):
+        if (
+            len(drivers) >= 4
+            and total_delta < 0
+            and not (top_drill and top_drill.share_of_change >= 0.60)
+        ):
             neg_shares = [d.share_of_change for d in drivers if d.direction == "negative"]
             if len(neg_shares) >= 4 and all(s < 0.38 for s in neg_shares):
                 is_broad = True

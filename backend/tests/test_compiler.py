@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from app.adapters.base import QueryByteCapExceededError, QueryGuardrailError
@@ -35,7 +37,8 @@ def test_compiler_line_chart_additive_duckdb(ecommerce_model_id: str) -> None:
     compiled = query_compiler.compile(spec, dialect="duckdb")
     assert "date_trunc('day', \"created_at\")" in compiled.sql
     assert "SUM(sale_price)" in compiled.sql
-    assert "INTERVAL 30 DAY" in compiled.sql
+    assert "start_date" in compiled.params
+    assert "end_date" in compiled.params
     assert "ORDER BY 1 ASC" in compiled.sql
 
 
@@ -50,7 +53,8 @@ def test_compiler_line_chart_additive_bigquery(ecommerce_model_id: str) -> None:
     )
     compiled = query_compiler.compile(spec, dialect="bigquery")
     assert "TIMESTAMP_TRUNC(`created_at`, DAY, 'UTC')" in compiled.sql
-    assert "TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)" in compiled.sql
+    assert "@start_date" in compiled.sql
+    assert "@end_date" in compiled.sql
     assert "`duckdb_local.main.thelook_ecommerce_orders`" in compiled.sql
 
 
@@ -206,6 +210,7 @@ def test_compiler_thelook_joins_all_five_specs() -> None:
     Verifies that all 5 demo specs compile cleanly to valid BigQuery SQL without row multiplication.
     """
     import json
+
     conn = connection_service.create_connection(
         ConnectionCreateRequest(
             name="BQ thelook",
@@ -302,7 +307,10 @@ def test_compiler_thelook_joins_all_five_specs() -> None:
         title="Revenue by category",
     )
     compiled2 = query_compiler.compile(spec2, dialect="bigquery")
-    assert "LEFT JOIN `bigquery-public-data.thelook_ecommerce.products` AS `products` ON `order_items`.`product_id` = `products`.`id`" in compiled2.sql
+    assert (
+        "LEFT JOIN `bigquery-public-data.thelook_ecommerce.products` AS `products` ON `order_items`.`product_id` = `products`.`id`"
+        in compiled2.sql
+    )
     assert "products.category" in compiled2.sql
 
     # 3. Orders by state (bar) -> requires LEFT JOIN users
@@ -314,7 +322,10 @@ def test_compiler_thelook_joins_all_five_specs() -> None:
         title="Orders by state",
     )
     compiled3 = query_compiler.compile(spec3, dialect="bigquery")
-    assert "LEFT JOIN `bigquery-public-data.thelook_ecommerce.users` AS `users` ON `order_items`.`user_id` = `users`.`id`" in compiled3.sql
+    assert (
+        "LEFT JOIN `bigquery-public-data.thelook_ecommerce.users` AS `users` ON `order_items`.`user_id` = `users`.`id`"
+        in compiled3.sql
+    )
     assert "users.state" in compiled3.sql
 
     # 4. Average order value over time (line, ratio metric)
@@ -339,13 +350,17 @@ def test_compiler_thelook_joins_all_five_specs() -> None:
         title="Orders by traffic source",
     )
     compiled5 = query_compiler.compile(spec5, dialect="bigquery")
-    assert "LEFT JOIN `bigquery-public-data.thelook_ecommerce.users` AS `users` ON `order_items`.`user_id` = `users`.`id`" in compiled5.sql
+    assert (
+        "LEFT JOIN `bigquery-public-data.thelook_ecommerce.users` AS `users` ON `order_items`.`user_id` = `users`.`id`"
+        in compiled5.sql
+    )
     assert "users.traffic_source" in compiled5.sql
 
 
 def test_compiler_partition_filter_enforcement() -> None:
     """Tests that BigQuery partition filter is enforced when required on the model."""
     import json
+
     conn = connection_service.create_connection(
         ConnectionCreateRequest(
             name="Partition Test BQ",
@@ -394,11 +409,13 @@ def test_compiler_partition_filter_enforcement() -> None:
         ),
         dialect="bigquery",
     )
-    assert "`event_date` >= TIMESTAMP_SUB" in compiled.sql
+    assert "`event_date` >= DATE(@start_date)" in compiled.sql
 
 
 @pytest.mark.asyncio
-async def test_compiler_dry_run_bytes_cap_refusal(monkeypatch: pytest.MonkeyPatch, ecommerce_model_id: str) -> None:
+async def test_compiler_dry_run_bytes_cap_refusal(
+    monkeypatch: pytest.MonkeyPatch, ecommerce_model_id: str
+) -> None:
     """Tests that execution is refused BEFORE running when dry-run bytes exceed cap."""
     spec = ChartSpec(
         model_id=ecommerce_model_id,
@@ -407,11 +424,12 @@ async def test_compiler_dry_run_bytes_cap_refusal(monkeypatch: pytest.MonkeyPatc
     )
     # Patch dry_run to simulate exceeding cap
     from app.adapters.base import DryRunResult
-    async def mock_dry_run(self, sql: str) -> DryRunResult:
+
+    async def mock_dry_run(self, sql: str, params: dict | None = None) -> DryRunResult:
         return DryRunResult(
             valid=False,
             bytes_scanned=20 * 1024 * 1024 * 1024,
-            error="This query would scan 20.0 GB, above your 10.0 GB limit. Narrow the date range or raise the limit in Settings."
+            error="This query would scan 20.0 GB, above your 10.0 GB limit. Narrow the date range or raise the limit in Settings.",
         )
 
     monkeypatch.setattr("app.adapters.duckdb_adapter.DuckDBAdapter.dry_run", mock_dry_run)
@@ -442,3 +460,85 @@ def test_compiler_golden_sql_snapshots_all_chart_types(ecommerce_model_id: str) 
             assert compiled.sql.startswith("SELECT")
             assert "revenue" in compiled.sql
             assert compiled.dialect == dialect
+
+def test_compiler_anchor_date_computation_duckdb() -> None:
+    # Test that QueryCompiler compiles date filters using Python-computed windows from model.anchor_date
+    conn = connection_service.create_connection(
+        ConnectionCreateRequest(name="Anchor DuckDB", warehouse_type="duckdb")
+    )
+    model = semantic_service.create_model(
+        ModelCreate(
+            connection_id=conn.id,
+            name="orders_anchor_test",
+            project_id="duckdb_local",
+            dataset_id="main",
+            table_name="thelook_ecommerce_orders",
+            primary_time_column="created_at",
+            anchor_date="2024-05-31",
+            metrics=[MetricCreate(name="revenue", numerator_expr="SUM(sale_price)", metric_type="additive")],
+        )
+    )
+
+    spec = ChartSpec(
+        model_id=model.id,
+        metric="revenue",
+        date_range="last_30_days",
+    )
+    compiled = query_compiler.compile(spec, dialect="duckdb")
+    assert "CURRENT_DATE" not in compiled.sql
+    assert "CURRENT_TIMESTAMP" not in compiled.sql
+    assert "2024-05-01" in compiled.sql or "2024-05-31" in compiled.sql or "start_date" in compiled.params
+
+
+def test_compiler_type_aware_parameters_and_casts() -> None:
+    # DATE column vs TIMESTAMP column
+    conn = connection_service.create_connection(
+        ConnectionCreateRequest(
+            name="BQ Type Aware",
+            warehouse_type="bigquery",
+            key_json=json.dumps(DUMMY_SA_KEY),
+        )
+    )
+    # Model with DATE column
+    date_model = semantic_service.create_model(
+        ModelCreate(
+            connection_id=conn.id,
+            name="events_date_model",
+            project_id="test_proj",
+            dataset_id="test_ds",
+            table_name="events_date_table",
+            primary_time_column="event_date",
+            anchor_date="2018-08-31",
+            metrics=[MetricCreate(name="cnt", numerator_expr="COUNT(*)", metric_type="additive")],
+        )
+    )
+    spec_date = ChartSpec(
+        model_id=date_model.id,
+        metric="cnt",
+        date_range="last_30_days",
+    )
+    compiled_date = query_compiler.compile(spec_date, dialect="bigquery")
+    assert "TIMESTAMP_SUB(CURRENT_TIMESTAMP()" not in compiled_date.sql
+    # Parameter or cast must match DATE
+    assert "DATE" in compiled_date.sql
+    assert "@start_date" in compiled_date.sql or "@start_date" in str(compiled_date.params)
+
+
+def test_compiler_custom_date_range_dict() -> None:
+    conn = connection_service.create_connection(
+        ConnectionCreateRequest(name="Custom Range DuckDB", warehouse_type="duckdb")
+    )
+    model = semantic_service.seed_default_ecommerce_set(
+        connection_id=conn.id,
+        project_id="duckdb_local",
+        dataset_id="main",
+        table_name="thelook_ecommerce_orders",
+    )
+    spec = ChartSpec(
+        model_id=model.id,
+        metric="revenue",
+        date_range={"start": "2023-01-01", "end": "2023-01-31"},
+    )
+    compiled = query_compiler.compile(spec, dialect="duckdb")
+    assert "2023-01-01" in str(compiled.sql) or compiled.params.get("start_date", "").startswith("2023-01-01")
+    assert "2023-01-31" in str(compiled.sql) or compiled.params.get("end_date", "").startswith("2023-01-31")

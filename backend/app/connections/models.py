@@ -46,6 +46,7 @@ class TableDetail(BaseModel):
     require_partition_filter: bool = False
     clustering_fields: list[str] = Field(default_factory=list)
     columns: list[TableColumnInfo] = Field(default_factory=list)
+    sample_rows: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class TablePreviewResponse(BaseModel):

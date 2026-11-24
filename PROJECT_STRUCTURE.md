@@ -19,6 +19,9 @@ Whence/
 ├── agents/
 │   └── build_doc.md             # Authoritative product brief and phase specification
 ├── docs/
+│   ├── SDLC.md                  # Section 20 full SDLC definition of ready, done, and release gates
+│   ├── adr/                     # Architectural Decision Records
+│   │   └── 0001-database-migrations.md # ADR on Alembic database migration adoption
 │   └── screenshots/             # Visual verification captures (light & dark mode)
 │       ├── dashboards_empty_light.png
 │       ├── dashboards_empty_dark.png
@@ -34,12 +37,22 @@ Whence/
 │       ├── dev_style_dark.png
 │       ├── explain_dialog_light.png
 │       ├── explain_dialog_dark.png
+│       ├── olist_dashboard_light.png
+│       ├── olist_dashboard_dark.png
+│       ├── olist_explain_light.png
+│       ├── olist_explain_dark.png
 │       ├── semantic_dimensions_light.png
 │       └── semantic_dimensions_dark.png
 ├── backend/
 │   ├── Dockerfile               # Python 3.12 production container
 │   ├── pyproject.toml           # Strict Ruff, Mypy, and Pytest configuration
 │   ├── requirements.txt         # Pinned backend dependencies
+│   ├── alembic/                 # Linear database migrations
+│   │   ├── env.py
+│   │   └── versions/
+│   │       ├── 0001_initial_schema.py
+│   │       ├── 0002_add_model_anchor_date.py
+│   │       └── 0003_add_dashboard_skipped_charts.py
 │   ├── app/
 │   │   ├── __init__.py
 │   │   ├── config.py            # Pydantic v2 settings loaded from environment
@@ -53,6 +66,12 @@ Whence/
 │   │   │   ├── base.py          # WarehouseAdapter ABC, sqlglot guardrails (SELECT-only, byte cap, timeout, AST validation)
 │   │   │   ├── duckdb_adapter.py# DuckDB adapter (local dev, demo mode, eval)
 │   │   │   └── bigquery_adapter.py # Google BigQuery adapter (production target)
+│   │   ├── dashboards/          # Dashboards, charts, and execution
+│   │   │   ├── __init__.py
+│   │   │   ├── models.py
+│   │   │   ├── planner.py       # Deterministic DashboardPlanner generating dynamic charts
+│   │   │   ├── service.py
+│   │   │   └── router.py
 │   │   ├── connections/         # [Phase 1 - Item 1b] Warehouse connection management
 │   │   │   ├── __init__.py
 │   │   │   ├── models.py        # Connection schemas, error mapping, and check models

@@ -167,7 +167,9 @@ class OpenAICompatibleProvider(LLMClient):
         async with httpx.AsyncClient(timeout=25.0) as client:
             resp = await client.post(url, headers=headers, json=payload)
             # Some providers/free models reject response_format={"type": "json_object"} or reasoning
-            if resp.status_code == 400 and any(k in resp.text for k in ("response_format", "reasoning")):
+            if resp.status_code == 400 and any(
+                k in resp.text for k in ("response_format", "reasoning")
+            ):
                 payload_fallback = dict(payload)
                 payload_fallback.pop("response_format", None)
                 payload_fallback.pop("reasoning", None)
@@ -179,7 +181,11 @@ class OpenAICompatibleProvider(LLMClient):
                     err_json = resp.json()
                     if "error" in err_json:
                         err_obj = err_json["error"]
-                        error_body = err_obj.get("message", str(err_obj)) if isinstance(err_obj, dict) else str(err_obj)
+                        error_body = (
+                            err_obj.get("message", str(err_obj))
+                            if isinstance(err_obj, dict)
+                            else str(err_obj)
+                        )
                 except Exception:
                     pass
                 raise RuntimeError(f"OpenRouter API error ({resp.status_code}): {error_body}")
@@ -246,25 +252,29 @@ class FakeLLMClient(LLMClient):
         schema: type[T],
         temperature: float = 0.1,
     ) -> tuple[T, TokenUsageLog]:
-        self.raw_payload_spy.append({
-            "system_prompt": system_prompt,
-            "user_prompt": user_prompt,
-            "temperature": temperature,
-        })
+        self.raw_payload_spy.append(
+            {
+                "system_prompt": system_prompt,
+                "user_prompt": user_prompt,
+                "temperature": temperature,
+            }
+        )
         if self.should_fail:
             raise RuntimeError("Fake LLM forced error")
 
         if self.canned_response is not None:
             res = schema.model_validate(self.canned_response.model_dump())
         else:
-            res = schema.model_validate({
-                "headline": "Revenue increased by 10.0% during the period.",
-                "supporting_sentences": [
-                    "Category Apparel drove the increase.",
-                    "No other category exhibited unexpected movement.",
-                ],
-                "caveats": ["Growth may reflect regular seasonality."],
-            })
+            res = schema.model_validate(
+                {
+                    "headline": "Revenue increased by 10.0% during the period.",
+                    "supporting_sentences": [
+                        "Category Apparel drove the increase.",
+                        "No other category exhibited unexpected movement.",
+                    ],
+                    "caveats": ["Growth may reflect regular seasonality."],
+                }
+            )
 
         usage = TokenUsageLog(
             prompt_tokens=150,

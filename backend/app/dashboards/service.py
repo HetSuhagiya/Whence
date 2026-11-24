@@ -15,7 +15,9 @@ from app.dashboards.models import (
     DashboardCreate,
     DashboardPublic,
     ExplainRequest,
+    SkippedChartNote,
 )
+from app.dashboards.planner import DashboardPlanner
 from app.db import get_connection_db
 from app.explain.engine import ExplainEngine
 from app.narrative.service import narrative_service
@@ -50,65 +52,21 @@ class DashboardService:
         dash_id = str(uuid.uuid4())
         dash_name = req.name.strip() if req.name and req.name.strip() else f"{conn.name} Overview"
 
-        # Generate the 5 standard demo specs for this model
-        demo_specs = [
-            ChartSpec(
-                model_id=model.id,
-                metric="revenue",
-                time_grain="day",
-                date_range="last_30_days",
-                chart_type="line",
-                title="Revenue over time",
-            ),
-            ChartSpec(
-                model_id=model.id,
-                metric="revenue",
-                dimensions=["category"],
-                date_range="last_30_days",
-                chart_type="bar",
-                title="Revenue by category",
-                limit=10,
-            ),
-            ChartSpec(
-                model_id=model.id,
-                metric="orders",
-                dimensions=["state"],
-                date_range="last_30_days",
-                chart_type="bar",
-                title="Orders by state",
-                limit=10,
-            ),
-            ChartSpec(
-                model_id=model.id,
-                metric="aov",
-                time_grain="day",
-                date_range="last_30_days",
-                chart_type="line",
-                title="Average order value over time",
-            ),
-            ChartSpec(
-                model_id=model.id,
-                metric="orders",
-                dimensions=["traffic_source"],
-                date_range="last_30_days",
-                chart_type="stacked_bar",
-                title="Orders by traffic source",
-                limit=8,
-            ),
-        ]
+        plan = DashboardPlanner.plan(model)
+        skipped_json = json.dumps([s.model_dump() for s in plan.skipped_charts])
 
         db = get_connection_db()
         cur = db.cursor()
         cur.execute(
             """
-            INSERT INTO dashboards (id, name, connection_id, model_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO dashboards (id, name, connection_id, model_id, skipped_charts, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (dash_id, dash_name, conn.id, model.id, now, now),
+            (dash_id, dash_name, conn.id, model.id, skipped_json, now, now),
         )
 
         charts: list[DashboardChartPublic] = []
-        for pos, spec in enumerate(demo_specs):
+        for pos, spec in enumerate(plan.charts):
             c_id = str(uuid.uuid4())
             cur.execute(
                 """
@@ -139,7 +97,11 @@ class DashboardService:
             connection_name=conn.name,
             warehouse_type=conn.warehouse_type,
             model_id=model.id,
+            model_name=model.name,
+            model_description=model.description,
+            primary_time_column=model.primary_time_column,
             charts=charts,
+            skipped_charts=plan.skipped_charts,
             created_at=now,
             updated_at=now,
         )
@@ -149,10 +111,12 @@ class DashboardService:
         cur = db.cursor()
         cur.execute(
             """
-            SELECT d.id, d.name, d.connection_id, d.model_id, d.created_at, d.updated_at,
-                   c.name as connection_name, c.warehouse_type
+            SELECT d.id, d.name, d.connection_id, d.model_id, d.skipped_charts, d.created_at, d.updated_at,
+                   c.name as connection_name, c.warehouse_type,
+                   m.name as model_name, m.description as model_description, m.primary_time_column
             FROM dashboards d
             JOIN connections c ON d.connection_id = c.id
+            LEFT JOIN models m ON d.model_id = m.id
             ORDER BY d.created_at DESC
             """
         )
@@ -181,6 +145,18 @@ class DashboardService:
                 )
                 for cr in c_rows
             ]
+
+            skipped_raw = (
+                r["skipped_charts"]
+                if "skipped_charts" in r.keys() and r["skipped_charts"]
+                else "[]"
+            )
+            try:
+                skipped_items = json.loads(skipped_raw)
+            except Exception:
+                skipped_items = []
+            skipped_notes = [SkippedChartNote.model_validate(item) for item in skipped_items]
+
             dashboards.append(
                 DashboardPublic(
                     id=r["id"],
@@ -189,7 +165,11 @@ class DashboardService:
                     connection_name=r["connection_name"],
                     warehouse_type=r["warehouse_type"],
                     model_id=r["model_id"],
+                    model_name=r["model_name"] if "model_name" in r.keys() else None,
+                    model_description=r["model_description"] if "model_description" in r.keys() else None,
+                    primary_time_column=r["primary_time_column"] if "primary_time_column" in r.keys() else None,
                     charts=charts,
+                    skipped_charts=skipped_notes,
                     created_at=r["created_at"],
                     updated_at=r["updated_at"],
                 )
@@ -202,10 +182,12 @@ class DashboardService:
         cur = db.cursor()
         cur.execute(
             """
-            SELECT d.id, d.name, d.connection_id, d.model_id, d.created_at, d.updated_at,
-                   c.name as connection_name, c.warehouse_type
+            SELECT d.id, d.name, d.connection_id, d.model_id, d.skipped_charts, d.created_at, d.updated_at,
+                   c.name as connection_name, c.warehouse_type,
+                   m.name as model_name, m.description as model_description, m.primary_time_column
             FROM dashboards d
             JOIN connections c ON d.connection_id = c.id
+            LEFT JOIN models m ON d.model_id = m.id
             WHERE d.id = ?
             """,
             (dashboard_id,),
@@ -237,6 +219,18 @@ class DashboardService:
             )
             for cr in c_rows
         ]
+
+        skipped_raw = (
+            r["skipped_charts"]
+            if "skipped_charts" in r.keys() and r["skipped_charts"]
+            else "[]"
+        )
+        try:
+            skipped_items = json.loads(skipped_raw)
+        except Exception:
+            skipped_items = []
+        skipped_notes = [SkippedChartNote.model_validate(item) for item in skipped_items]
+
         db.close()
 
         return DashboardPublic(
@@ -246,7 +240,11 @@ class DashboardService:
             connection_name=r["connection_name"],
             warehouse_type=r["warehouse_type"],
             model_id=r["model_id"],
+            model_name=r["model_name"] if "model_name" in r.keys() else None,
+            model_description=r["model_description"] if "model_description" in r.keys() else None,
+            primary_time_column=r["primary_time_column"] if "primary_time_column" in r.keys() else None,
             charts=charts,
+            skipped_charts=skipped_notes,
             created_at=r["created_at"],
             updated_at=r["updated_at"],
         )
@@ -365,7 +363,9 @@ class DashboardService:
             # Determine target point
             target_pt = req.target_point
             if not target_pt and rows:
-                target_pt = str(rows[-1].get("period", rows[-1].get(model.primary_time_column, "latest")))
+                target_pt = str(
+                    rows[-1].get("period", rows[-1].get(model.primary_time_column, "latest"))
+                )
 
             # Find matching row index
             target_idx = len(rows) - 1
@@ -414,7 +414,11 @@ class DashboardService:
             yield f"data: {json.dumps({'event': 'step_start', 'step': 5, 'name': 'drivers', 'title': steps_info[4][2]})}\n\n"
 
             # Introspect explanation dimensions
-            active_dims = [d for d in model.dimensions if not d.exclude_from_explanation and d.dimension_type == "categorical"]
+            active_dims = [
+                d
+                for d in model.dimensions
+                if not d.exclude_from_explanation and d.dimension_type == "categorical"
+            ]
             if not active_dims and model.dimensions:
                 active_dims = [model.dimensions[0]]
 
@@ -501,7 +505,9 @@ class DashboardService:
 
             # Step 10: Narrative Generation
             yield f"data: {json.dumps({'event': 'step_start', 'step': 10, 'name': 'narrative', 'title': steps_info[9][2]})}\n\n"
-            narrative = await narrative_service.generate_narrative(evidence, metric_description=metric_desc or "")
+            narrative = await narrative_service.generate_narrative(
+                evidence, metric_description=metric_desc or ""
+            )
             yield f"data: {json.dumps({'event': 'step_complete', 'step': 10, 'name': 'narrative', 'detail': 'Narrative generated and verified'})}\n\n"
 
             # Completed event with full payload

@@ -85,9 +85,34 @@ def test_additive_contribution_and_offsetting_effects() -> None:
 def test_step_size_and_noise_median_mad() -> None:
     """Tests median and MAD noise check and rank summary generation."""
     # 26 historical weekly deltas centered around 10
-    history = [10.0, 12.0, 9.0, 11.0, 10.0, 13.0, 8.0, 10.0, 14.0, 9.0,
-               10.0, 11.0, 12.0, 10.0, 9.0, 11.0, 10.0, 8.0, 13.0, 10.0,
-               9.0, 12.0, 11.0, 10.0, 9.0, 10.0]
+    history = [
+        10.0,
+        12.0,
+        9.0,
+        11.0,
+        10.0,
+        13.0,
+        8.0,
+        10.0,
+        14.0,
+        9.0,
+        10.0,
+        11.0,
+        12.0,
+        10.0,
+        9.0,
+        11.0,
+        10.0,
+        8.0,
+        13.0,
+        10.0,
+        9.0,
+        12.0,
+        11.0,
+        10.0,
+        9.0,
+        10.0,
+    ]
 
     # Current delta of 45 is a huge spike
     noise_res, check = step_size_and_noise_check(current_delta=45.0, history_deltas=history)
@@ -96,14 +121,18 @@ def test_step_size_and_noise_median_mad() -> None:
     assert "larger than 26 of the last 26" in noise_res.rank_summary
 
     # Current delta of 10.5 is within normal noise
-    noise_res_normal, check_normal = step_size_and_noise_check(current_delta=10.5, history_deltas=history)
+    noise_res_normal, check_normal = step_size_and_noise_check(
+        current_delta=10.5, history_deltas=history
+    )
     assert noise_res_normal.is_outside_normal_range is False
     assert noise_res_normal.z_score < 1.0
 
 
 def test_step_completeness_flagging() -> None:
     """Tests that incomplete/partial data is flagged and drops confidence."""
-    complete, check = step_completeness_check(is_partial=True, reason="Partial day: only 6 hours of data")
+    complete, check = step_completeness_check(
+        is_partial=True, reason="Partial day: only 6 hours of data"
+    )
     assert complete is False
     assert check.status == "warning"
     assert "Partial day" in check.message
@@ -112,6 +141,7 @@ def test_step_completeness_flagging() -> None:
 def test_step_data_quality_scan_zero_drop() -> None:
     """Tests detection of zero drop (tracking / pipeline break)."""
     from app.explain.models import DriverContribution
+
     drivers = [
         DriverContribution(
             id="1",

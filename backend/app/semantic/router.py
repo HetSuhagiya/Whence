@@ -55,6 +55,16 @@ async def update_model(model_id: str, req: ModelUpdate) -> ModelPublic:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
+@router.post("/models/{model_id}/refresh-anchor", response_model=ModelPublic)
+async def refresh_anchor(model_id: str) -> ModelPublic:
+    try:
+        return await semantic_service.discover_and_set_anchor_date(model_id)
+    except KeyError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
 @router.delete("/models/{model_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_model(model_id: str) -> None:
     try:

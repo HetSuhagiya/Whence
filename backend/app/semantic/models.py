@@ -113,6 +113,7 @@ class ModelBase(BaseModel):
     joins: list[ModelJoin] = Field(default_factory=list)
     require_partition_filter: bool = False
     partition_column: str | None = None
+    anchor_date: str | None = None
 
 
 class ModelCreate(ModelBase):
@@ -124,6 +125,7 @@ class ModelUpdate(BaseModel):
     name: str | None = None
     primary_time_column: str | None = None
     description: str | None = None
+    anchor_date: str | None = None
 
 
 class ModelPublic(ModelBase):

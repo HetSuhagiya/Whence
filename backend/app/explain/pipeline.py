@@ -50,7 +50,8 @@ def step_completeness_check(
         check = PipelineCheckRecord(
             name="completeness",
             status="warning",
-            message=reason or "Current period is incomplete. Comparing like with like or flagging partial data.",
+            message=reason
+            or "Current period is incomplete. Comparing like with like or flagging partial data.",
             details={"is_complete": False},
         )
         return False, check
@@ -239,7 +240,10 @@ def step_driver_search(
         name="driver_search",
         status="pass" if all_drivers else "warning",
         message=f"Evaluated {len(dimension_data)} dimensions; found {len(all_drivers)} segment drivers.",
-        details={"dimensions_evaluated": list(dimension_data.keys()), "has_offsetting": any_offsetting},
+        details={
+            "dimensions_evaluated": list(dimension_data.keys()),
+            "has_offsetting": any_offsetting,
+        },
     )
     return all_drivers, all_offsetting, any_offsetting, check
 
@@ -290,7 +294,9 @@ def step_two_way_drill(
                     depth=2,
                     row_count=max(curr_cnt, base_cnt),
                 )
-                if best_finding is None or abs(finding.share_of_change) > abs(best_finding.share_of_change):
+                if best_finding is None or abs(finding.share_of_change) > abs(
+                    best_finding.share_of_change
+                ):
                     best_finding = finding
 
     if best_finding:
@@ -363,7 +369,9 @@ def step_data_quality_scan(
                     )
                 )
 
-        if dimension_summaries.get("_meta", {}).get("is_duplicate_load") or dimension_summaries.get("all", {}).get("duplicate_jump"):
+        if dimension_summaries.get("_meta", {}).get("is_duplicate_load") or dimension_summaries.get(
+            "all", {}
+        ).get("duplicate_jump"):
             issues.append(
                 DataQualityIssue(
                     id=str(uuid.uuid4()),
@@ -374,7 +382,9 @@ def step_data_quality_scan(
                 )
             )
 
-    status: CheckStatus = "fail" if any(i.severity == "high" for i in issues) else ("warning" if issues else "pass")
+    status: CheckStatus = (
+        "fail" if any(i.severity == "high" for i in issues) else ("warning" if issues else "pass")
+    )
     check = PipelineCheckRecord(
         name="data_quality_scan",
         status=status,
@@ -430,26 +440,42 @@ def step_compute_confidence(
         return "Low", "Data is incomplete or contains partial time periods."
 
     if any(i.severity == "high" for i in dq_issues):
-        return "Low", "Severe data quality issue (e.g. tracking zero drop, null spike, or duplicate load) dominates movement."
+        return (
+            "Low",
+            "Severe data quality issue (e.g. tracking zero drop, null spike, or duplicate load) dominates movement.",
+        )
 
     if is_broad_based:
-        return "Low", "Decline is broad-based across all categories and channels; no single driver accounts for the movement."
+        return (
+            "Low",
+            "Decline is broad-based across all categories and channels; no single driver accounts for the movement.",
+        )
 
     if seasonality_result and seasonality_result.seasonality_explains_change:
-        return "Low", "Movement is accounted for by routine weekday or seasonal cycles; no anomalous cause found."
+        return (
+            "Low",
+            "Movement is accounted for by routine weekday or seasonal cycles; no anomalous cause found.",
+        )
 
     if not noise_result.is_outside_normal_range:
         return "Low", "Change is within normal historical volatility; no single cause stands out."
 
     if top_driver and top_driver.low_support:
-        return "Low", f"Top segment '{top_driver.segment_value}' has low sample support (< min rows)."
+        return (
+            "Low",
+            f"Top segment '{top_driver.segment_value}' has low sample support (< min rows).",
+        )
 
     # High triggers
     top_share = top_driver.share_of_change if top_driver else 0.0
     drill_share = top_drill.share_of_change if top_drill else 0.0
 
     if (top_share >= 0.50 or drill_share >= 0.60) and not has_offsetting:
-        lead = top_driver.segment_value if (top_share >= 0.50 and top_driver) else (str(top_drill.segment_values) if top_drill else "")
+        lead = (
+            top_driver.segment_value
+            if (top_share >= 0.50 and top_driver)
+            else (str(top_drill.segment_values) if top_drill else "")
+        )
         share_val = top_share if top_share >= 0.50 else drill_share
         return (
             "High",
@@ -460,8 +486,14 @@ def step_compute_confidence(
     top_3_sum = sum(d.share_of_change for d in top_3_drivers)
     if top_3_sum >= 0.60 or has_offsetting or top_share >= 0.35:
         if has_offsetting:
-            return "Medium", "Offsetting effects detected: large positive and negative segment movements largely balance out."
-        return "Medium", f"Top 3 drivers explain {top_3_sum * 100:.1f}% of change across multiple segments."
+            return (
+                "Medium",
+                "Offsetting effects detected: large positive and negative segment movements largely balance out.",
+            )
+        return (
+            "Medium",
+            f"Top 3 drivers explain {top_3_sum * 100:.1f}% of change across multiple segments.",
+        )
 
     return "Low", "No single driver or combination explains at least 50% of the movement."
 

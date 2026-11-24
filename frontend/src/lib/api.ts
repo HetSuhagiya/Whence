@@ -112,6 +112,7 @@ export interface ModelPublic {
   table_name: string;
   primary_time_column: string;
   description?: string | null;
+  anchor_date?: string | null;
   dimensions: DimensionPublic[];
   metrics: MetricPublic[];
   created_at: number;
@@ -179,6 +180,12 @@ export interface DashboardChartPublic {
   created_at: number;
 }
 
+export interface SkippedChartNote {
+  title: string;
+  reason: string;
+  suggestion: string;
+}
+
 export interface DashboardPublic {
   id: string;
   name: string;
@@ -186,7 +193,11 @@ export interface DashboardPublic {
   connection_name: string;
   warehouse_type: string;
   model_id: string;
+  model_name?: string | null;
+  model_description?: string | null;
+  primary_time_column?: string | null;
   charts: DashboardChartPublic[];
+  skipped_charts?: SkippedChartNote[];
   created_at: number;
   updated_at: number;
 }
@@ -430,6 +441,14 @@ export const api = {
   async getModel(modelId: string): Promise<ModelPublic> {
     const res = await fetch(`${API_BASE}/semantic/models/${modelId}`);
     if (!res.ok) throw await parseApiError(res, "Failed to list connections");
+    return res.json();
+  },
+
+  async refreshModelAnchor(modelId: string): Promise<ModelPublic> {
+    const res = await fetch(`${API_BASE}/semantic/models/${modelId}/refresh-anchor`, {
+      method: "POST",
+    });
+    if (!res.ok) throw await parseApiError(res, "Failed to refresh model anchor date");
     return res.json();
   },
 

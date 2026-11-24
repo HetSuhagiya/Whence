@@ -1,10 +1,34 @@
 import asyncio
 import json
 import time
+import datetime
 from typing import Any
 
 from google.cloud import bigquery
 from google.oauth2 import service_account
+
+
+def _to_bq_query_parameters(params: dict[str, Any] | None) -> list[bigquery.ScalarQueryParameter]:
+    if not params:
+        return []
+    bq_params: list[bigquery.ScalarQueryParameter] = []
+    for k, v in params.items():
+        if isinstance(v, bool):
+            ptype = "BOOL"
+        elif isinstance(v, int):
+            ptype = "INT64"
+        elif isinstance(v, float):
+            ptype = "FLOAT64"
+        elif isinstance(v, datetime.date) and not isinstance(v, datetime.datetime):
+            ptype = "DATE"
+        elif isinstance(v, datetime.datetime):
+            ptype = "TIMESTAMP"
+        else:
+            ptype = "STRING"
+            v = str(v)
+        bq_params.append(bigquery.ScalarQueryParameter(k, ptype, v))
+    return bq_params
+
 
 from app.adapters.base import (
     ColumnInfo,
@@ -32,11 +56,13 @@ class BigQueryAdapter(WarehouseAdapter):
         encrypted_credentials: str | None = None,
         project_id: str | None = None,
         dataset_id: str | None = None,
+        location: str | None = None,
         crypto: CredentialCrypto | None = None,
         client: bigquery.Client | None = None,
     ) -> None:
         self.project_id = project_id or "whence-demo-bq"
         self.dataset_id = dataset_id or "ecommerce"
+        self.location = location
         self._encrypted_credentials = encrypted_credentials
         self._crypto = crypto
         self._client = client
@@ -216,7 +242,7 @@ class BigQueryAdapter(WarehouseAdapter):
                 ],
             )
 
-    async def _execute_dry_run(self, sql: str) -> DryRunResult:
+    async def _execute_dry_run(self, sql: str, params: dict[str, Any] | None = None) -> DryRunResult:
         """
         Executes a dry-run BigQuery query job to accurately estimate bytes processed
         without incurring costs or running the query.
@@ -236,8 +262,9 @@ class BigQueryAdapter(WarehouseAdapter):
                 dry_run=True,
                 use_query_cache=False,
                 labels={"app": settings.WHENCE_QUERY_LABEL},
+                query_parameters=_to_bq_query_parameters(params),
             )
-            query_job = client.query(sql, job_config=job_config)
+            query_job = client.query(sql, job_config=job_config, location=self.location)
             bytes_scanned = query_job.total_bytes_processed or 0
             return DryRunResult(
                 valid=True,
@@ -275,8 +302,9 @@ class BigQueryAdapter(WarehouseAdapter):
             job_config = bigquery.QueryJobConfig(
                 dry_run=False,
                 labels={"app": settings.WHENCE_QUERY_LABEL},
+                query_parameters=_to_bq_query_parameters(params),
             )
-            query_job = client.query(sql, job_config=job_config)
+            query_job = client.query(sql, job_config=job_config, location=self.location)
             results = query_job.result(timeout=float(settings.QUERY_TIMEOUT_SECONDS))
 
             rows: list[dict[str, Any]] = [dict(row.items()) for row in results]

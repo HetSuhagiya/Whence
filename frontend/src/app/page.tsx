@@ -189,7 +189,7 @@ export default function DashboardsPage() {
                     Source: {dash.connection_name}
                   </p>
                   <p className="text-[11px] text-[var(--text-muted)]/75 mt-0.5">
-                    5 ecommerce charts • Click-to-explain enabled
+                    5 analytical charts • Click-to-explain enabled
                   </p>
                 </div>
 

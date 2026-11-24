@@ -14,6 +14,7 @@ from app.semantic.models import (
     DimensionPublic,
     DimensionType,
     DimensionUpdate,
+    DisplayFormat,
     MetricCreate,
     MetricPreviewPoint,
     MetricPreviewRequest,
@@ -28,6 +29,68 @@ from app.semantic.models import (
     ModelPublic,
     ModelUpdate,
 )
+
+MAX_CATEGORICAL_CARDINALITY = 50
+
+MEASURE_NAME_KEYWORDS = {
+    "revenue",
+    "sales",
+    "price",
+    "amount",
+    "total",
+    "cost",
+    "freight",
+    "payment",
+    "fee",
+    "tax",
+    "discount",
+    "margin",
+    "profit",
+    "spend",
+    "subtotal",
+    "gross",
+    "net",
+    "balance",
+    "charge",
+    "value",
+    "quantity",
+    "qty",
+    "units",
+}
+
+DISCRETE_INT_KEYWORDS = {
+    "score",
+    "rating",
+    "installment",
+    "installments",
+    "rank",
+    "level",
+    "step",
+    "grade",
+    "priority",
+    "stars",
+}
+
+PII_OR_HIGH_CARDINALITY_KEYWORDS = {
+    "email",
+    "phone",
+    "address",
+    "street",
+    "first_name",
+    "last_name",
+    "full_name",
+    "zip",
+    "postal_code",
+    "postcode",
+    "token",
+    "hash",
+    "password",
+    "secret",
+    "url",
+    "description",
+    "comment",
+    "notes",
+}
 
 
 class SemanticService:
@@ -48,6 +111,7 @@ class SemanticService:
             return BigQueryAdapter(
                 project_id=conn.project_id or "",
                 dataset_id="thelook_ecommerce",
+                location=conn.location,
                 client=client,
             )
 
@@ -66,8 +130,8 @@ class SemanticService:
                 id, connection_id, name, project_id, dataset_id,
                 table_name, primary_time_column, description,
                 joins, require_partition_filter, partition_column,
-                created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                anchor_date, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 model_id,
@@ -81,6 +145,7 @@ class SemanticService:
                 json.dumps([j.model_dump() for j in req.joins]),
                 1 if req.require_partition_filter else 0,
                 req.partition_column,
+                req.anchor_date,
                 now,
                 now,
             ),
@@ -158,14 +223,12 @@ class SemanticService:
 
         require_partition_filter = (
             bool(row["require_partition_filter"])
-            if "require_partition_filter" in row.keys() and row["require_partition_filter"] is not None
+            if "require_partition_filter" in row.keys()
+            and row["require_partition_filter"] is not None
             else False
         )
-        partition_column = (
-            row["partition_column"]
-            if "partition_column" in row.keys()
-            else None
-        )
+        partition_column = row["partition_column"] if "partition_column" in row.keys() else None
+        anchor_date = row["anchor_date"] if "anchor_date" in row.keys() else None
 
         return ModelPublic(
             id=row["id"],
@@ -179,6 +242,7 @@ class SemanticService:
             joins=joins,
             require_partition_filter=require_partition_filter,
             partition_column=partition_column,
+            anchor_date=anchor_date,
             dimensions=dimensions,
             metrics=metrics,
             created_at=row["created_at"],
@@ -214,14 +278,19 @@ class SemanticService:
             else row["primary_time_column"]
         )
         new_desc = req.description if req.description is not None else row["description"]
+        new_anchor = (
+            req.anchor_date
+            if req.anchor_date is not None
+            else (row["anchor_date"] if "anchor_date" in row.keys() else None)
+        )
 
         cur.execute(
             """
             UPDATE models
-            SET name = ?, primary_time_column = ?, description = ?, updated_at = ?
+            SET name = ?, primary_time_column = ?, description = ?, anchor_date = ?, updated_at = ?
             WHERE id = ?
             """,
-            (new_name, new_time, new_desc, now, model_id),
+            (new_name, new_time, new_desc, new_anchor, now, model_id),
         )
         db.commit()
         return self.get_model(model_id)
@@ -672,19 +741,105 @@ class SemanticService:
                 unit="$",
             )
 
+    async def discover_and_set_anchor_date(self, model_id: str) -> ModelPublic:
+        """
+        Discovers the maximum date or partition metadata in the underlying table,
+        and sets model.anchor_date to that date (formatted as YYYY-MM-DD).
+        """
+        model = self.get_model(model_id)
+        adapter = self.get_adapter_for_connection(model.connection_id)
+        time_col = model.primary_time_column
+
+        if adapter.dialect == "duckdb":
+            tbl_ref = f'"{model.table_name}"'
+            time_ref = f'"{time_col}"'
+            query = f"SELECT strftime(MAX({time_ref}), '%Y-%m-%d') AS max_date FROM {tbl_ref}"
+        else:
+            tbl_ref = f"`{model.project_id}.{model.dataset_id}.{model.table_name}`"
+            time_ref = f"`{time_col}`"
+            query = (
+                f"SELECT FORMAT_DATE('%Y-%m-%d', DATE(MAX({time_ref}))) AS max_date FROM {tbl_ref}"
+            )
+
+        max_date_str: str | None = None
+        try:
+            res = await adapter.run(query)
+            if res.rows and res.rows[0].get("max_date"):
+                raw_val = res.rows[0]["max_date"]
+                max_date_str = str(raw_val)[:10]
+        except Exception:
+            max_date_str = None
+
+        if not max_date_str:
+            from datetime import date
+
+            max_date_str = date.today().isoformat()
+
+        return self.update_model(model_id, ModelUpdate(anchor_date=max_date_str))
+
     # -------------------------------------------------------------
     # Auto-suggest & Default Ecommerce Seed Set
     # -------------------------------------------------------------
-    def auto_suggest_for_table(self, connection_id: str, table_name: str) -> AutoSuggestResponse:
-        _ = connection_service.get_connection(connection_id)
+    def auto_suggest_for_table(
+        self,
+        connection_id: str,
+        table_name: str,
+        sample_rows: list[dict[str, Any]] | None = None,
+    ) -> AutoSuggestResponse:
+        conn = connection_service.get_connection(connection_id)
         sources = connection_service.get_sources(connection_id)
         target_source = (
             next((s for s in sources if s.table_name == table_name), None) if sources else None
         )
-        columns = target_source.columns if target_source else []
+        columns = list(target_source.columns) if target_source and target_source.columns else []
+
+        # Obtain free table-rows sample if not explicitly passed (never a billed scan)
+        if sample_rows is None:
+            if target_source and target_source.sample_rows:
+                sample_rows = target_source.sample_rows
+            else:
+                try:
+                    preview = connection_service.preview_table(
+                        conn_id=connection_id,
+                        project_id=target_source.project_id
+                        if target_source
+                        else (conn.project_id or "duckdb_local"),
+                        dataset_id=target_source.dataset_id if target_source else "main",
+                        table_name=table_name,
+                        limit=100,
+                    )
+                    sample_rows = preview.rows
+                    # If columns were empty, infer TableColumnInfo from preview
+                    if not columns and preview.columns:
+                        from app.connections.models import TableColumnInfo
+
+                        columns = [
+                            TableColumnInfo(name=c, data_type="VARCHAR") for c in preview.columns
+                        ]
+                except Exception:
+                    sample_rows = []
+
+        if not columns and sample_rows:
+            from app.connections.models import TableColumnInfo
+
+            first_row = sample_rows[0]
+            columns = [TableColumnInfo(name=k, data_type="VARCHAR") for k in first_row.keys()]
 
         # If introspected table columns are present, tailor definitions to actual schema
         if columns:
+            # Measure cardinality per column using the free sample rows (never a billed scan)
+            sample_cardinality: dict[str, int] = {}
+            if sample_rows:
+                for c in columns:
+                    vals = {
+                        row[c.name]
+                        for row in sample_rows
+                        if c.name in row
+                        and row[c.name] is not None
+                        and str(row[c.name]).strip() != ""
+                    }
+                    sample_cardinality[c.name] = len(vals)
+
             col_map = {c.name.lower(): c for c in columns}
 
             # 1. Detect primary time column
@@ -697,36 +852,131 @@ class SemanticService:
                 "ordered_at",
                 "event_time",
                 "order_timestamp",
+                "delivered_at",
             ]
-            primary_time = "created_at"
+            primary_time: str | None = None
             for tc in time_candidates:
                 if tc in col_map:
                     primary_time = col_map[tc].name
                     break
-            else:
+            if not primary_time:
                 for c in columns:
-                    if any(t in c.data_type.upper() for t in ["TIMESTAMP", "DATE", "DATETIME"]):
+                    dt_u = c.data_type.upper()
+                    c_low = c.name.lower()
+                    if any(t in dt_u for t in ["TIMESTAMP", "DATE", "DATETIME", "TIME"]) or any(
+                        c_low.endswith(sfx) for sfx in ["_at", "_date", "_time", "_timestamp"]
+                    ):
                         primary_time = c.name
                         break
+            if not primary_time:
+                primary_time = "created_at"
 
-            # 2. Dimensions
+            # 2. Dimensions and Numeric Measures categorization
             dimensions: list[DimensionCreate] = []
+            numeric_measures: list[Any] = []
+
             for c in columns:
                 c_lower = c.name.lower()
+                dt_upper = c.data_type.upper()
+                card = sample_cardinality.get(c.name)
+
+                # Check if identifier
+                is_id = (
+                    any(
+                        c_lower.endswith(sfx)
+                        for sfx in [
+                            "_id",
+                            "id",
+                            "_code",
+                            "_key",
+                            "uuid",
+                            "_number",
+                            "_num",
+                            "_pk",
+                            "_fk",
+                            "_unique_id",
+                            "sku",
+                            "_sku",
+                        ]
+                    )
+                    or c_lower in {"id", "uuid", "pk", "fk", "key", "code", "guid", "sku"}
+                    or c_lower.startswith("id_")
+                )
+
+                # Check if timestamp / time column
+                is_time = (
+                    any(t in dt_upper for t in ["TIMESTAMP", "DATE", "DATETIME", "TIME"])
+                    or any(c_lower.endswith(sfx) for sfx in ["_at", "_date", "_time", "_timestamp"])
+                    or c_lower in {"date", "timestamp", "time", "day", "datetime"}
+                )
+
+                # Check if discrete small integer column (review_score, payment_installments, etc.)
+                is_int = any(
+                    t in dt_upper for t in ["INT", "INTEGER", "BIGINT", "SMALLINT", "TINYINT"]
+                )
+                is_discrete_int = is_int and (
+                    any(k in c_lower for k in DISCRETE_INT_KEYWORDS)
+                    or (
+                        card is not None
+                        and card <= MAX_CATEGORICAL_CARDINALITY
+                        and not any(k in c_lower for k in MEASURE_NAME_KEYWORDS)
+                    )
+                )
+
+                # Check if numeric measure
+                is_float = any(
+                    t in dt_upper for t in ["FLOAT", "DOUBLE", "NUMERIC", "DECIMAL", "REAL"]
+                )
+                has_measure_name = any(k in c_lower for k in MEASURE_NAME_KEYWORDS)
+                is_high_card_num = (
+                    (is_int or is_float) and card is not None and card > MAX_CATEGORICAL_CARDINALITY
+                )
+                is_dim_suffix = any(
+                    c_lower.endswith(sfx)
+                    for sfx in [
+                        "_method",
+                        "_type",
+                        "_category",
+                        "_status",
+                        "_mode",
+                        "_source",
+                        "_channel",
+                        "_name",
+                    ]
+                )
+
+                is_measure = (
+                    (not is_id)
+                    and (not is_time)
+                    and (not is_discrete_int)
+                    and (not is_dim_suffix)
+                    and (is_float or has_measure_name or is_high_card_num)
+                )
+
+                if is_measure:
+                    numeric_measures.append(c)
+                    continue
+
+                # Primary time column is model's primary timeline, excluded from breakdown dimensions
                 if c.name == primary_time:
                     continue
-                is_id = any(
-                    c_lower.endswith(sfx)
-                    for sfx in ["_id", "id", "_code", "_key", "uuid", "_number"]
-                )
-                dim_type: DimensionType = "categorical"
-                if (
-                    any(t in c.data_type.upper() for t in ["INT", "FLOAT", "NUMERIC", "DECIMAL"])
-                    and not is_id
-                ):
-                    dim_type = "numeric_bucket"
-                elif any(t in c.data_type.upper() for t in ["DATE", "TIMESTAMP"]):
-                    dim_type = "time"
+
+                # Determine dimension type and explanation eligibility
+                if is_time:
+                    dim_type: DimensionType = "time"
+                    exclude_from_explanation = True
+                elif is_id:
+                    dim_type = "categorical"
+                    exclude_from_explanation = True
+                elif is_discrete_int:
+                    dim_type = "categorical"
+                    exclude_from_explanation = False
+                else:
+                    dim_type = "categorical"
+                    # Check cardinality threshold boundary: up to 50 distinct values
+                    is_high_card = card is not None and card > MAX_CATEGORICAL_CARDINALITY
+                    has_pii = any(k in c_lower for k in PII_OR_HIGH_CARDINALITY_KEYWORDS)
+                    exclude_from_explanation = is_high_card or has_pii
 
                 label = c.name.replace("_", " ").title()
                 dimensions.append(
@@ -736,13 +986,13 @@ class SemanticService:
                         dimension_type=dim_type,
                         label=label,
                         is_identifier=is_id,
-                        exclude_from_explanation=is_id,
+                        exclude_from_explanation=exclude_from_explanation,
                     )
                 )
 
-            # 3. Metrics
+            # 3. Metrics Generation
             metrics: list[MetricCreate] = []
-            # Revenue
+
             price_col = next(
                 (
                     c.name
@@ -752,7 +1002,76 @@ class SemanticService:
                 ),
                 None,
             )
-            if price_col:
+            order_id_col = next(
+                (
+                    c.name
+                    for c in columns
+                    if c.name.lower() in ["order_id", "id", "order_number", "orders"]
+                ),
+                None,
+            )
+            item_col = next(
+                (
+                    c.name
+                    for c in columns
+                    if c.name.lower() in ["order_item_id", "item_id", "product_id", "line_item_id"]
+                ),
+                None,
+            )
+
+            added_metric_names: set[str] = set()
+
+            # Add all numeric measures as candidate metrics with SUM(col)
+            for m_col in numeric_measures:
+                m_lower = m_col.name.lower()
+                fmt: DisplayFormat
+                if any(
+                    w in m_lower
+                    for w in [
+                        "price",
+                        "revenue",
+                        "sales",
+                        "amount",
+                        "cost",
+                        "total",
+                        "payment",
+                        "freight",
+                        "fee",
+                        "tax",
+                        "charge",
+                        "margin",
+                        "profit",
+                        "spend",
+                        "value",
+                    ]
+                ):
+                    fmt = "currency"
+                elif any(w in m_lower for w in ["percent", "pct", "rate", "ratio"]):
+                    fmt = "percent"
+                elif any(t in m_col.data_type.upper() for t in ["INT", "INTEGER", "BIGINT"]):
+                    fmt = "integer"
+                else:
+                    fmt = "decimal"
+
+                metric_name = m_col.name
+                if m_col.name == price_col and "revenue" not in added_metric_names:
+                    metric_name = "revenue"
+
+                description = f"Total {m_col.name.replace('_', ' ')} computed as SUM({m_col.name})"
+                metrics.append(
+                    MetricCreate(
+                        name=metric_name,
+                        description=description,
+                        metric_type="additive",
+                        numerator_expr=f"SUM({m_col.name})",
+                        display_format=fmt,
+                        higher_is_better=True,
+                    )
+                )
+                added_metric_names.add(metric_name)
+
+            # If revenue metric wasn't created yet but table has price_col
+            if "revenue" not in added_metric_names and price_col:
                 metrics.append(
                     MetricCreate(
                         name="revenue",
@@ -763,28 +1082,10 @@ class SemanticService:
                         higher_is_better=True,
                     )
                 )
-            else:
-                metrics.append(
-                    MetricCreate(
-                        name="revenue",
-                        description="Total revenue (SUM of sales)",
-                        metric_type="additive",
-                        numerator_expr="SUM(sale_price)",
-                        display_format="currency",
-                        higher_is_better=True,
-                    )
-                )
+                added_metric_names.add("revenue")
 
-            # Orders
-            order_id_col = next(
-                (
-                    c.name
-                    for c in columns
-                    if c.name.lower() in ["order_id", "id", "order_number", "orders"]
-                ),
-                None,
-            )
-            if order_id_col:
+            # Orders metric
+            if order_id_col and "orders" not in added_metric_names:
                 metrics.append(
                     MetricCreate(
                         name="orders",
@@ -795,28 +1096,10 @@ class SemanticService:
                         higher_is_better=True,
                     )
                 )
-            else:
-                metrics.append(
-                    MetricCreate(
-                        name="orders",
-                        description="Distinct count of orders placed",
-                        metric_type="additive",
-                        numerator_expr="COUNT(DISTINCT order_id)",
-                        display_format="integer",
-                        higher_is_better=True,
-                    )
-                )
+                added_metric_names.add("orders")
 
-            # Items sold
-            item_col = next(
-                (
-                    c.name
-                    for c in columns
-                    if c.name.lower() in ["order_item_id", "item_id", "product_id", "line_item_id"]
-                ),
-                None,
-            )
-            if item_col:
+            # Items sold metric
+            if item_col and "items_sold" not in added_metric_names:
                 metrics.append(
                     MetricCreate(
                         name="items_sold",
@@ -827,54 +1110,63 @@ class SemanticService:
                         higher_is_better=True,
                     )
                 )
-            else:
+                added_metric_names.add("items_sold")
+
+            # AOV (Ratio: Revenue / Orders)
+            rev_metric = next(
+                (
+                    m
+                    for m in metrics
+                    if m.name
+                    in [
+                        "revenue",
+                        "items_revenue",
+                        "payment_total",
+                        "total_amount",
+                        "amount",
+                        "sale_price",
+                        "price",
+                    ]
+                ),
+                None,
+            )
+            if rev_metric and order_id_col and "aov" not in added_metric_names:
                 metrics.append(
                     MetricCreate(
-                        name="items_sold",
-                        description="Total count of individual items sold",
-                        metric_type="additive",
-                        numerator_expr="COUNT(order_item_id)",
-                        display_format="integer",
+                        name="aov",
+                        description="Average order value (Revenue / Orders)",
+                        metric_type="ratio",
+                        numerator_expr=rev_metric.numerator_expr,
+                        denominator_expr=f"COUNT(DISTINCT {order_id_col})",
+                        display_format="currency",
                         higher_is_better=True,
                     )
                 )
-
-            # AOV (Ratio: Revenue / Orders)
-            metrics.append(
-                MetricCreate(
-                    name="aov",
-                    description="Average order value (Revenue / Orders)",
-                    metric_type="ratio",
-                    numerator_expr=f"SUM({price_col})" if price_col else "SUM(sale_price)",
-                    denominator_expr=(
-                        f"COUNT(DISTINCT {order_id_col})"
-                        if order_id_col
-                        else "COUNT(DISTINCT order_id)"
-                    ),
-                    display_format="currency",
-                    higher_is_better=True,
-                )
-            )
+                added_metric_names.add("aov")
 
             # Items per order (Ratio: Items / Orders)
-            metrics.append(
-                MetricCreate(
-                    name="items_per_order",
-                    description="Average items per order (Items / Orders)",
-                    metric_type="ratio",
-                    numerator_expr=f"COUNT({item_col})" if item_col else "COUNT(order_item_id)",
-                    denominator_expr=(
-                        f"COUNT(DISTINCT {order_id_col})"
-                        if order_id_col
-                        else "COUNT(DISTINCT order_id)"
-                    ),
-                    display_format="decimal",
-                    higher_is_better=True,
+            items_metric = next((m for m in metrics if m.name == "items_sold"), None)
+            if items_metric and order_id_col and "items_per_order" not in added_metric_names:
+                metrics.append(
+                    MetricCreate(
+                        name="items_per_order",
+                        description="Average items per order (Items / Orders)",
+                        metric_type="ratio",
+                        numerator_expr=items_metric.numerator_expr,
+                        denominator_expr=f"COUNT(DISTINCT {order_id_col})",
+                        display_format="decimal",
+                        higher_is_better=True,
+                    )
                 )
-            )
+                added_metric_names.add("items_per_order")
 
+            model_name = (
+                "TheLook Ecommerce Orders"
+                if "thelook" in table_name.lower()
+                else f"{table_name.replace('_', ' ').title()} Model"
+            )
             return AutoSuggestResponse(
-                model_name=f"{table_name.replace('_', ' ').title()} Model",
+                model_name=model_name,
                 primary_time_column=primary_time,
                 dimensions=dimensions,
                 metrics=metrics,
@@ -1015,10 +1307,7 @@ class SemanticService:
                 table_name = table_name or "thelook_ecommerce_orders"
             else:
                 project_id = (
-                    project_id
-                    or conn.billing_project
-                    or conn.project_id
-                    or "default_project"
+                    project_id or conn.billing_project or conn.project_id or "default_project"
                 )
                 dataset_id = dataset_id or "thelook_ecommerce"
                 table_name = table_name or "orders"
@@ -1044,7 +1333,24 @@ class SemanticService:
             dimensions=suggested.dimensions,
             metrics=suggested.metrics,
         )
-        return self.create_model(model_create)
+        created_model = self.create_model(model_create)
+
+        # Automatically discover and set anchor date if possible
+        try:
+            import asyncio
+            import concurrent.futures
+
+            try:
+                asyncio.get_running_loop()
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    fut = executor.submit(
+                        asyncio.run, self.discover_and_set_anchor_date(created_model.id)
+                    )
+                    return fut.result()
+            except RuntimeError:
+                return asyncio.run(self.discover_and_set_anchor_date(created_model.id))
+        except Exception:
+            return created_model
 
 
 semantic_service = SemanticService()

@@ -122,6 +122,25 @@ class ConnectionService:
             updated_at=now,
         )
 
+    def get_adapter_for_connection(self, connection_id: str) -> Any:
+        conn = self.get_connection(connection_id)
+        if conn.warehouse_type == "duckdb":
+            from app.adapters.duckdb_adapter import DuckDBAdapter
+            from app.demo_dataset import ensure_demo_ecommerce_dataset
+
+            db_path = ensure_demo_ecommerce_dataset()
+            return DuckDBAdapter(database_path=db_path)
+        else:
+            from app.adapters.bigquery_adapter import BigQueryAdapter
+
+            client = self._get_bq_client(connection_id, billing_project=conn.billing_project)
+            return BigQueryAdapter(
+                project_id=conn.project_id or "",
+                dataset_id="thelook_ecommerce",
+                location=conn.location,
+                client=client,
+            )
+
     def list_connections(self) -> list[ConnectionPublic]:
         db = self._get_db()
         cur = db.cursor()

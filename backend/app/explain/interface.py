@@ -10,8 +10,9 @@ class QueryRunnerProtocol(Protocol):
     can supply mock, in-memory, or direct warehouse data with zero web dependencies.
     """
 
-    async def __call__(self, sql: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-        ...
+    async def __call__(
+        self, sql: str, params: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]: ...
 
 
 SyncQueryRunner = Callable[[str, dict[str, Any] | None], list[dict[str, Any]]]

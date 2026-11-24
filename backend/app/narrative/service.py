@@ -41,7 +41,9 @@ class NarrativeService:
         user_prompt = user_path.read_text(encoding="utf-8")
         return system_prompt, user_prompt
 
-    def _build_user_prompt(self, user_template: str, evidence: Evidence, metric_description: str) -> str:
+    def _build_user_prompt(
+        self, user_template: str, evidence: Evidence, metric_description: str
+    ) -> str:
         # Build top drivers text, limited to max_segments
         drivers = (evidence.drivers or [])[: self.max_segments]
         if drivers:
@@ -54,7 +56,9 @@ class NarrativeService:
                     f"baseline = {d.baseline_value:,.2f}, current = {d.current_value:,.2f}"
                 )
                 if d.rate_effect is not None and d.mix_effect is not None:
-                    line += f" (rate effect = {d.rate_effect:+,.2f}, mix effect = {d.mix_effect:+,.2f})"
+                    line += (
+                        f" (rate effect = {d.rate_effect:+,.2f}, mix effect = {d.mix_effect:+,.2f})"
+                    )
                 driver_lines.append(line)
             top_drivers_text = "\n".join(driver_lines)
         else:
@@ -69,7 +73,9 @@ class NarrativeService:
             # Check if drivers have rate/mix breakdown
             rate_sum = sum(d.rate_effect for d in drivers if d.rate_effect is not None)
             mix_sum = sum(d.mix_effect for d in drivers if d.mix_effect is not None)
-            rate_mix_text = f"Total rate effect = {rate_sum:+,.2f}, Total mix effect = {mix_sum:+,.2f}"
+            rate_mix_text = (
+                f"Total rate effect = {rate_sum:+,.2f}, Total mix effect = {mix_sum:+,.2f}"
+            )
 
         # Data quality flags
         flags = [f"{i.issue_type}: {i.description}" for i in (evidence.data_quality_issues or [])]
@@ -166,7 +172,9 @@ class NarrativeService:
                 result.fallback_reason = None
                 return result
 
-            logger.warning("Number check failed on retry: %s. Falling back to template.", retry_errors)
+            logger.warning(
+                "Number check failed on retry: %s. Falling back to template.", retry_errors
+            )
             return DeterministicFallbackGenerator.generate(
                 evidence, reason=f"Number check failed after retry: {retry_errors[0]}"
             )

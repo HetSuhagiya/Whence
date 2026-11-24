@@ -1,3 +1,4 @@
+import datetime
 from typing import Any
 
 from app.adapters.base import (
@@ -6,6 +7,7 @@ from app.adapters.base import (
     validate_sql,
 )
 from app.compiler.spec import ChartSpec, CompiledQuery
+from app.connections.service import connection_service
 from app.semantic.models import DimensionPublic, ModelPublic
 from app.semantic.service import semantic_service
 
@@ -30,6 +32,32 @@ class QueryCompiler:
         if dialect == "bigquery":
             return f"`{model.project_id}.{model.dataset_id}.{model.table_name}`"
         return f'"{model.table_name}"'
+
+    def _get_time_column_type(self, model: ModelPublic) -> str:
+        """Determines the data type of the model's primary time column."""
+        try:
+            sources = connection_service.get_sources(model.connection_id)
+            target_source = next((s for s in sources if s.table_name == model.table_name), None)
+            if target_source:
+                for col in target_source.columns:
+                    if col.name.lower() == model.primary_time_column.lower():
+                        return col.data_type.upper()
+        except Exception:
+            pass
+
+        col_name = model.primary_time_column.lower()
+        if "date" in col_name and "time" not in col_name:
+            return "DATE"
+        return "TIMESTAMP"
+
+    def _resolve_anchor_date(self, model: ModelPublic) -> datetime.date:
+        """Resolves the anchor date for the model, defaulting to today."""
+        if model.anchor_date:
+            try:
+                return datetime.date.fromisoformat(model.anchor_date[:10])
+            except Exception:
+                pass
+        return datetime.date.today()
 
     def compile(self, spec: ChartSpec, dialect: str = "duckdb") -> CompiledQuery:
         model = semantic_service.get_model(spec.model_id)
@@ -85,13 +113,15 @@ class QueryCompiler:
             selected_dim_exprs.append((alias, expr))
 
         # 3. Detect and build joins (many-to-one declared keys, compiled as LEFT JOIN)
-        all_referenced_text = " ".join([
-            metric.numerator_expr,
-            metric.denominator_expr or "",
-            metric.fixed_filter or "",
-            *(expr for _, expr in selected_dim_exprs),
-            *(f.dimension for f in spec.filters),
-        ])
+        all_referenced_text = " ".join(
+            [
+                metric.numerator_expr,
+                metric.denominator_expr or "",
+                metric.fixed_filter or "",
+                *(expr for _, expr in selected_dim_exprs),
+                *(f.dimension for f in spec.filters),
+            ]
+        )
 
         active_joins: list[str] = []
         if model.joins:
@@ -115,11 +145,16 @@ class QueryCompiler:
 
         base_table_ref = self.get_table_reference(model, clean_dialect)
         if active_joins:
-            from_clause = f"{base_table_ref} AS {base_alias}\n            " + "\n            ".join(active_joins)
+            from_clause = f"{base_table_ref} AS {base_alias}\n            " + "\n            ".join(
+                active_joins
+            )
             time_ref = f"{base_alias}.{self.quote_identifier(time_col, clean_dialect)}"
         else:
             from_clause = base_table_ref
             time_ref = self.quote_identifier(time_col, clean_dialect)
+
+        # Resolve primary time column data type and anchor date
+        time_type = self._get_time_column_type(model)
 
         # Time grain dimension (defined week start: Monday; defined time zone: UTC)
         if spec.time_grain:
@@ -131,9 +166,14 @@ class QueryCompiler:
                     "year": "YEAR",
                 }
                 bq_grain = grain_map.get(spec.time_grain, "DAY")
-                time_expr = (
-                    f"FORMAT_DATE('%Y-%m-%d', DATE(TIMESTAMP_TRUNC({time_ref}, {bq_grain}, 'UTC')))"
-                )
+                if time_type == "DATE":
+                    time_expr = f"FORMAT_DATE('%Y-%m-%d', DATE_TRUNC({time_ref}, {bq_grain}))"
+                elif time_type == "DATETIME":
+                    time_expr = f"FORMAT_DATETIME('%Y-%m-%d', DATETIME_TRUNC({time_ref}, {bq_grain}))"
+                else:
+                    time_expr = (
+                        f"FORMAT_DATE('%Y-%m-%d', DATE(TIMESTAMP_TRUNC({time_ref}, {bq_grain}, 'UTC')))"
+                    )
             else:
                 duck_grain_map = {
                     "day": "day",
@@ -148,37 +188,74 @@ class QueryCompiler:
         # 4. Where Clause Construction
         where_conditions: list[str] = []
         params: dict[str, Any] = {}
+        anchor_d = self._resolve_anchor_date(model)
+
+        def _format_date_val(d: datetime.date, is_end: bool = False) -> str:
+            if time_type == "DATE":
+                return d.isoformat()
+            elif time_type == "DATETIME":
+                time_str = "23:59:59" if is_end else "00:00:00"
+                return f"{d.isoformat()} {time_str}"
+            else:  # TIMESTAMP or default
+                time_str = "23:59:59" if is_end else "00:00:00"
+                return f"{d.isoformat()} {time_str}"
+
+        def _cast_expr(param_name: str) -> str:
+            if clean_dialect == "bigquery":
+                ref = f"@{param_name}"
+                if time_type == "DATE":
+                    return f"DATE({ref})"
+                elif time_type == "DATETIME":
+                    return f"DATETIME({ref})"
+                else:
+                    return f"TIMESTAMP({ref})"
+            else:
+                ref = f"${param_name}"
+                if time_type == "DATE":
+                    return f"CAST({ref} AS DATE)"
+                elif time_type == "DATETIME":
+                    return f"CAST({ref} AS TIMESTAMP)"
+                else:
+                    return f"CAST({ref} AS TIMESTAMP)"
 
         # Time range filter
+        start_d: datetime.date | None = None
+        end_d: datetime.date | None = None
+
         if isinstance(spec.date_range, str):
-            if spec.date_range == "last_30_days":
-                if clean_dialect == "bigquery":
-                    where_conditions.append(
-                        f"{time_ref} >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)"
-                    )
-                else:
-                    where_conditions.append(f"{time_ref} >= CURRENT_DATE - INTERVAL 30 DAY")
+            if spec.date_range == "last_7_days":
+                end_d = anchor_d
+                start_d = anchor_d - datetime.timedelta(days=7)
+            elif spec.date_range == "last_30_days":
+                end_d = anchor_d
+                start_d = anchor_d - datetime.timedelta(days=30)
             elif spec.date_range == "last_90_days":
-                if clean_dialect == "bigquery":
-                    where_conditions.append(
-                        f"{time_ref} >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 90 DAY)"
-                    )
-                else:
-                    where_conditions.append(f"{time_ref} >= CURRENT_DATE - INTERVAL 90 DAY")
+                end_d = anchor_d
+                start_d = anchor_d - datetime.timedelta(days=90)
             elif spec.date_range == "last_12_months":
-                if clean_dialect == "bigquery":
-                    where_conditions.append(
-                        f"{time_ref} >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 365 DAY)"
-                    )
-                else:
-                    where_conditions.append(f"{time_ref} >= CURRENT_DATE - INTERVAL 365 DAY")
+                end_d = anchor_d
+                start_d = anchor_d - datetime.timedelta(days=365)
         elif isinstance(spec.date_range, dict):
-            start = spec.date_range.get("start")
-            end = spec.date_range.get("end")
-            if start:
-                where_conditions.append(f"{time_ref} >= '{start}'")
-            if end:
-                where_conditions.append(f"{time_ref} <= '{end}'")
+            s_str = spec.date_range.get("start")
+            e_str = spec.date_range.get("end")
+            if s_str:
+                try:
+                    start_d = datetime.date.fromisoformat(str(s_str)[:10])
+                except Exception:
+                    pass
+            if e_str:
+                try:
+                    end_d = datetime.date.fromisoformat(str(e_str)[:10])
+                except Exception:
+                    pass
+
+        if start_d is not None:
+            params["start_date"] = _format_date_val(start_d, is_end=False)
+            where_conditions.append(f"{time_ref} >= {_cast_expr('start_date')}")
+
+        if end_d is not None:
+            params["end_date"] = _format_date_val(end_d, is_end=True)
+            where_conditions.append(f"{time_ref} <= {_cast_expr('end_date')}")
 
         # Fixed metric filter
         if metric.fixed_filter:
@@ -275,7 +352,7 @@ class QueryCompiler:
         compiled = self.compile(spec, dialect=adapter.dialect)
 
         # Dry run before execution to check validity and bytes cap
-        dry_run = await adapter.dry_run(compiled.sql)
+        dry_run = await adapter.dry_run(compiled.sql, params=compiled.params)
         if not dry_run.valid:
             if "above your" in (dry_run.error or "") or "limit" in (dry_run.error or ""):
                 raise QueryByteCapExceededError(dry_run.error or "Byte cap exceeded.")

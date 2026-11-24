@@ -39,15 +39,17 @@ def compute_additive_contributions(
         c_cnt = c_counts.get(k, 0)
         is_low_support = (b_cnt + c_cnt > 0) and (max(b_cnt, c_cnt) < min_rows)
 
-        items.append({
-            "key": k,
-            "b_val": b_val,
-            "c_val": c_val,
-            "delta": delta_i,
-            "b_cnt": b_cnt,
-            "c_cnt": c_cnt,
-            "low_support": is_low_support,
-        })
+        items.append(
+            {
+                "key": k,
+                "b_val": b_val,
+                "c_val": c_val,
+                "delta": delta_i,
+                "b_cnt": b_cnt,
+                "c_cnt": c_cnt,
+                "low_support": is_low_support,
+            }
+        )
 
     # Detect offsetting effects: gross absolute movement is much larger than net change
     has_offsetting = False
@@ -162,7 +164,9 @@ def compute_ratio_rate_mix_split(
         is_low_support = (b_cnt + c_cnt > 0) and (max(b_cnt, c_cnt) < min_rows)
 
         share = (total_contrib / total_delta_R) if abs(total_delta_R) > 1e-9 else 0.0
-        direction: Literal["positive", "negative"] = "positive" if total_contrib >= 0 else "negative"
+        direction: Literal["positive", "negative"] = (
+            "positive" if total_contrib >= 0 else "negative"
+        )
 
         contrib = DriverContribution(
             id=str(uuid.uuid4()),
@@ -182,10 +186,16 @@ def compute_ratio_rate_mix_split(
         contributions.append(contrib)
 
     has_offsetting = False
-    if gross_impact > 0 and (abs(total_delta_R) < 1e-9 or (gross_impact / (abs(total_delta_R) + 1e-9) > 2.5)):
+    if gross_impact > 0 and (
+        abs(total_delta_R) < 1e-9 or (gross_impact / (abs(total_delta_R) + 1e-9) > 2.5)
+    ):
         has_offsetting = True
 
-    offsetting_contributions = [c for c in contributions if abs(c.contribution_amount) > 0.05 * gross_impact] if has_offsetting else []
+    offsetting_contributions = (
+        [c for c in contributions if abs(c.contribution_amount) > 0.05 * gross_impact]
+        if has_offsetting
+        else []
+    )
 
     contributions.sort(key=lambda c: abs(c.contribution_amount), reverse=True)
     offsetting_contributions.sort(key=lambda c: abs(c.contribution_amount), reverse=True)

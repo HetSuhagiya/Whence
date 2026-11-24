@@ -251,9 +251,7 @@ def validate_metric_expression(
     metric_target = root_stmt.expressions[0]
 
     # Walk all nodes inside the metric expression
-    allowed_cols_set = (
-        {c.lower() for c in allowed_columns} if allowed_columns is not None else None
-    )
+    allowed_cols_set = {c.lower() for c in allowed_columns} if allowed_columns is not None else None
 
     for node in metric_target.walk():
         # 1. No window functions
@@ -325,7 +323,7 @@ class WarehouseAdapter(ABC):
         pass
 
     @abstractmethod
-    async def _execute_dry_run(self, sql: str) -> DryRunResult:
+    async def _execute_dry_run(self, sql: str, params: dict[str, Any] | None = None) -> DryRunResult:
         """Underlying adapter implementation for dry run."""
         pass
 
@@ -342,10 +340,10 @@ class WarehouseAdapter(ABC):
         """
         validate_sql(sql, dialect=self.dialect)
 
-    async def dry_run(self, sql: str) -> DryRunResult:
+    async def dry_run(self, sql: str, params: dict[str, Any] | None = None) -> DryRunResult:
         """Validates query safety and estimates bytes scanned."""
         self.validate_select_only(sql)
-        res = await self._execute_dry_run(sql)
+        res = await self._execute_dry_run(sql, params=params)
         res.formatted_bytes = format_bytes(res.bytes_scanned)
 
         settings = get_settings()
@@ -385,7 +383,7 @@ class WarehouseAdapter(ABC):
         self.validate_select_only(sql)
 
         # Step 2: Dry-run check
-        dry_run_res = await self.dry_run(sql)
+        dry_run_res = await self.dry_run(sql, params=params)
         if not dry_run_res.valid:
             raise QueryGuardrailError(dry_run_res.error or "Dry run validation failed.")
 

@@ -195,9 +195,12 @@ async def test_raw_rows_never_appear_in_prompt_payload(sample_evidence: Evidence
 
 
 @pytest.mark.asyncio
-async def test_product_works_with_llm_api_key_empty(sample_evidence: Evidence, monkeypatch: pytest.MonkeyPatch):
+async def test_product_works_with_llm_api_key_empty(
+    sample_evidence: Evidence, monkeypatch: pytest.MonkeyPatch
+):
     monkeypatch.setenv("LLM_API_KEY", "")
     from app.config import get_settings
+
     get_settings.cache_clear()
     service = NarrativeService(client=None)
     result = await service.generate_narrative(sample_evidence)
@@ -205,4 +208,3 @@ async def test_product_works_with_llm_api_key_empty(sample_evidence: Evidence, m
     assert "No language model API key configured" in (result.fallback_reason or "")
     get_settings.cache_clear()
     assert "Revenue increased by +131.6%" in result.headline
-

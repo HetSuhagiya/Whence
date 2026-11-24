@@ -283,17 +283,50 @@ All text, accent, and status combinations in light and dark mode meet or exceed 
 
 ### Semantic Layer: Models, dimensions, metrics, and explanation exclusion toggle
 | Light mode | Dark mode |
-| :--- | :--- |
+:--- | :--- |
 | ![Semantic layer light](docs/screenshots/data_semantic_layer_light.png) | ![Semantic layer dark](docs/screenshots/data_semantic_layer_dark.png) |
+
+### Olist BigQuery Production Dashboard (v0.1.1 Deterministic Planner)
+| Light mode | Dark mode |
+:--- | :--- |
+| ![Olist dashboard light](docs/screenshots/olist_dashboard_light.png) | ![Olist dashboard dark](docs/screenshots/olist_dashboard_dark.png) |
+
+### Live Explain Dialog on BigQuery Historical Point
+| Light mode | Dark mode |
+:--- | :--- |
+| ![Olist explain light](docs/screenshots/olist_explain_light.png) | ![Olist explain dark](docs/screenshots/olist_explain_dark.png) |
 
 ### Dev-only style guide (`/dev/style`)
 | Light mode | Dark mode |
-| :--- | :--- |
+:--- | :--- |
 | ![Dev style guide light](docs/screenshots/dev_style_light.png) | ![Dev style guide dark](docs/screenshots/dev_style_dark.png) |
 
 ---
 
-## 7. Phase 1 — Implementation status & roadmap
+## 7. Manual Test Script (Live BigQuery Connection)
+
+Verify your BigQuery connection end-to-end using the local application:
+
+1. **Start services**:
+   ```bash
+   npm run dev
+   ```
+2. **Open Data Workspace (`http://localhost:3000/data`)**:
+   - Confirm your BigQuery connection is listed with its regional location (e.g. `europe-west2`).
+   - Under Semantic Models, select `Fct Orders Model` and click **Refresh Anchor Date**; confirm anchor date shows `2018-10-17`.
+3. **Open Dashboards (`http://localhost:3000/dashboards`)**:
+   - Click **New Dashboard**, choose `Fct Orders Model`, and click **Create Dashboard**.
+   - The deterministic planner will generate up to 5 dynamic charts mapped to model metrics and eligible dimensions without hardcoded ecommerce strings.
+4. **Inspect Charts & Date Filter**:
+   - Confirm date presets show labels like `Last 30 days of data (to 17 Oct 2018)`.
+   - All charts execute live SQL without type mismatch or parameter errors.
+5. **Click to Explain**:
+   - Click any point on a chart or click **Explain**.
+   - Watch the 10-step progress checklist stream in real time and verify the narrative.
+
+---
+
+## 8. Phase 1 — Implementation status & roadmap
 
 - [x] **Item 1: DuckDB and BigQuery adapters** — Introspection, dry run, SELECT-only guardrail, byte cap enforcement (`MAX_BYTES_SCANNED_PER_QUERY`), execution timeouts (`QUERY_TIMEOUT_SECONDS`), audit logging with label `whence`, encrypted credentials at rest (BigQuery tested against mocks, marked not live-tested).
 - [x] **Item 1b: Connect a warehouse (BigQuery) in the UI** — 3-step connection flow (`/data`): service-account key upload (< 64 KB, encrypted AES-GCM at rest, private key never echoed or logged) + DuckDB demo fallback; choose billing project, browse project (plus add project by ID), datasets, tables with partitioning/clustering details and 10-row zero-cost preview (`list_rows`); 7-check live test checklist with plain-language error mapping (403 missing roles, disabled API, 404, byte cap).
@@ -304,4 +337,10 @@ All text, accent, and status combinations in light and dark mode meet or exceed 
 - [x] **Item 6: Narrative step** — Structured LLM narrative generation via provider-agnostic interface (`client.py`) supporting Google Gemini and OpenAI-compatible providers (including OpenRouter). Versioned prompts (`prompts/v1/`), schema validation (`NarrativeOutput`), strict `NumberChecker` ensuring every figure and segment exists in `Evidence`, daily token tracker, and deterministic template fallback.
 - [x] **Item 7: Click-to-explain dashboard UI** — Real dynamic dashboards page (`/`) and dashboard view (`/dashboards/[id]`). 5 demo charts compiled from semantic layer (Revenue Trend, Orders by Category, Top 10 States by Volume, Average Order Value, and Conversion Rate). Card hover/focus "Explain" buttons, keyboard shortcuts, "View SQL" inspection modal, and centred `ExplainDialog` with live Server-Sent Events (SSE) streaming checklist, interactive waterfall chart, breadcrumb drill-down, and evidence tabs.
 - [x] **Model Latency Optimization**: Integrated OpenRouter with chain-of-thought reasoning suppression (`reasoning: {"max_tokens": 0}`) and sign-aware numerical verification, reducing end-to-end explanation latency from ~40.5s down to 1.18s–1.31s with 100% LLM verification.
+- [x] **Defect Resolution & Real BigQuery Hardening (v0.1.1)**:
+  - Fix (e): Dataset location propagated to BigQuery query jobs (regional datasets target correct cluster).
+  - Fix (a): Type-aware date filters anchored to model timeline (`anchor_date`), typed parameters, custom date range, and anchor badges.
+  - Fix (c): Cardinality-aware dimension suggestions ($\le 50$ distinct values from preview sample); measures become candidate metrics, IDs & timestamps excluded from categorical breakdown.
+  - Fix (b): Deterministic `DashboardPlanner` generating dynamic charts with plain notes for skipped charts.
+  - Fix (d): Plain dashboard error banners, remediation tips per chart, technical details disclosure, sentence-cased metrics, model-derived subtitles.
 - [x] **Environment Security**: Verified `.env` and environment secret patterns are strictly ignored by Git in `.gitignore` (`.env`, `.env.local`, `.env.*`, `!.env.example`).

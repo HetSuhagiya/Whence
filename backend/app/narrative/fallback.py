@@ -9,7 +9,9 @@ class DeterministicFallbackGenerator:
     """
 
     @staticmethod
-    def generate(evidence: Evidence, reason: str = "Deterministic fallback used") -> NarrativeOutput:
+    def generate(
+        evidence: Evidence, reason: str = "Deterministic fallback used"
+    ) -> NarrativeOutput:
         metric = evidence.metric_name
         direction = "increased" if evidence.delta > 0 else "decreased"
         abs_delta_formatted = f"{abs(evidence.delta):,.2f}"
@@ -35,7 +37,10 @@ class DeterministicFallbackGenerator:
             else:
                 headline = f"No single cause stands out for the {pct_formatted} change in {metric}."
                 s1 = f"{metric.capitalize()} moved by {pct_formatted} ({abs_delta_formatted}) between {b_win} and {c_win}."
-                s2 = evidence.confidence_reason or "The change remains within normal historical volatility."
+                s2 = (
+                    evidence.confidence_reason
+                    or "The change remains within normal historical volatility."
+                )
 
             supporting = [s1, s2]
             caveats = ["Movement is within normal noise range or routine cyclical variance."]
@@ -79,11 +84,15 @@ class DeterministicFallbackGenerator:
                 s2 = "No other single segment accounted for a significant share of the movement."
                 supporting.append(s2)
         else:
-            supporting.append(f"{metric.capitalize()} moved from {evidence.baseline_value:,.2f} to {evidence.current_value:,.2f}.")
+            supporting.append(
+                f"{metric.capitalize()} moved from {evidence.baseline_value:,.2f} to {evidence.current_value:,.2f}."
+            )
             supporting.append("Contributions were distributed across multiple segments.")
 
         if evidence.has_offsetting_effects:
-            supporting.append("Offsetting effects were observed where gains in some segments were partially masked by declines elsewhere.")
+            supporting.append(
+                "Offsetting effects were observed where gains in some segments were partially masked by declines elsewhere."
+            )
 
         # Ensure between 2 and 4 supporting sentences
         while len(supporting) < 2:
@@ -96,7 +105,9 @@ class DeterministicFallbackGenerator:
             caveats.append("One or more top segments had low row support (< 20 records).")
         if evidence.context_events:
             event_names = [e.title for e in evidence.context_events]
-            caveats.append(f"Concurrent external events during this window may be contributing: {', '.join(event_names)}.")
+            caveats.append(
+                f"Concurrent external events during this window may be contributing: {', '.join(event_names)}."
+            )
 
         return NarrativeOutput(
             headline=headline,
