@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "../styles/tokens.css";
 
 @font-face {
   font-family: 'Newsreader';
@@ -107,21 +108,26 @@
   --trend-down: #ce2c31;      /* red11 text - Contrast 5.21:1 (Passes AA) */
   --trend-down-subtle: #feebec;/* red3 */
 
-  /* Dedicated Waterfall Bars (never mixed with series colours) */
-  --waterfall-up: #59A14F;
-  --waterfall-down: #E15759;
+  /* Dedicated Waterfall Bars: Radix green9 (#30A46C) and red9 (#E54D2E) */
+  --waterfall-up: #30A46C;
+  --waterfall-down: #E54D2E;
 
-  /* Chart Series (10 colours, in order, 1 colour default: #4E79A7) */
-  --chart-1: #4E79A7;
-  --chart-2: #F28E2B;
-  --chart-3: #E15759;
-  --chart-4: #76B7B2;
-  --chart-5: #59A14F;
-  --chart-6: #EDC948;
-  --chart-7: #B07AA1;
-  --chart-8: #FF9DA7;
-  --chart-9: #9C755F;
-  --chart-10: #BAB0AC;
+  /* Ink Series Tokens */
+  --chart-ink: #111827;            /* slate12 */
+  --chart-baseline: #889096;       /* slate8 */
+  --chart-highlight: #0090FF;      /* blue9 */
+
+  /* Paul Tol muted breakdown palette (10 ordered colours) */
+  --chart-1: #332288;
+  --chart-2: #88CCEE;
+  --chart-3: #44AA99;
+  --chart-4: #117733;
+  --chart-5: #999933;
+  --chart-6: #DDCC77;
+  --chart-7: #CC6677;
+  --chart-8: #882255;
+  --chart-9: #AA4499;
+  --chart-10: #DDDDDD;
 
   /* Radii & Shadows */
   --radius-sm: 4px;
@@ -164,21 +170,26 @@
   --trend-down: #ff9592;      /* redDark11 text - Contrast 8.35:1 (Passes AA) */
   --trend-down-subtle: #3b1219;/* redDark3 */
 
-  /* Dedicated Waterfall Bars */
-  --waterfall-up: #59A14F;
-  --waterfall-down: #E15759;
+  /* Dedicated Waterfall Bars: Radix green9 (#3DD68C) and red9 (#F3705A) in Dark Mode */
+  --waterfall-up: #3DD68C;
+  --waterfall-down: #F3705A;
 
-  /* Chart Series in Dark Mode */
-  --chart-1: #4E79A7;
-  --chart-2: #F28E2B;
-  --chart-3: #E15759;
-  --chart-4: #76B7B2;
-  --chart-5: #59A14F;
-  --chart-6: #EDC948;
-  --chart-7: #B07AA1;
-  --chart-8: #FF9DA7;
-  --chart-9: #9C755F;
-  --chart-10: #BAB0AC;
+  /* Ink Series Tokens in Dark Mode */
+  --chart-ink: #F9FAFB;            /* slate12 dark */
+  --chart-baseline: #889096;       /* slate8 */
+  --chart-highlight: #0090FF;      /* blue9 */
+
+  /* Paul Tol muted breakdown palette in Dark Mode (with contrast-adjusted variants where needed) */
+  --chart-1: #6F5ED3;              /* adjusted for dark bg contrast >= 3:1 */
+  --chart-2: #88CCEE;
+  --chart-3: #44AA99;
+  --chart-4: #117733;
+  --chart-5: #999933;
+  --chart-6: #DDCC77;
+  --chart-7: #CC6677;
+  --chart-8: #BD4882;              /* adjusted for dark bg contrast >= 3:1 */
+  --chart-9: #AA4499;
+  --chart-10: #DDDDDD;
 
   --shadow-overlay: 0 4px 24px -2px rgba(0, 0, 0, 0.5), 0 2px 8px -1px rgba(0, 0, 0, 0.3);
 }

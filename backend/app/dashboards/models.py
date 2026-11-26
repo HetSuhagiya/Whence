@@ -16,6 +16,16 @@ class SkippedChartNote(BaseModel):
     suggestion: str
 
 
+class DashboardChartCreate(BaseModel):
+    title: str | None = None
+    chart_type: str = "line"
+    metric: str
+    breakdown_dimension: str | None = None
+    time_grain: str | None = None
+    date_range: str | dict[str, str] | None = "last_30_days"
+    chart_spec: ChartSpec | None = None
+
+
 class DashboardChartPublic(BaseModel):
     id: str
     dashboard_id: str

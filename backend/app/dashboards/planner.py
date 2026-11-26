@@ -19,20 +19,20 @@ def _format_dimension_name(dim: DimensionPublic) -> str:
 
 
 def _get_eligible_dimensions(model: ModelPublic) -> list[DimensionPublic]:
-    # 1. Prefer categorical non-identifiers not excluded from explanation
+    # 1. Prefer categorical/numeric_bucket non-identifiers not excluded from explanation
     dims = [
         d
         for d in model.dimensions
-        if d.dimension_type == "categorical"
+        if d.dimension_type in ("categorical", "numeric_bucket")
         and not d.is_identifier
         and not d.exclude_from_explanation
     ]
     if not dims:
-        # 2. Fallback to any categorical non-identifier
+        # 2. Fallback to any categorical/numeric_bucket non-identifier
         dims = [
             d
             for d in model.dimensions
-            if d.dimension_type == "categorical" and not d.is_identifier
+            if d.dimension_type in ("categorical", "numeric_bucket") and not d.is_identifier
         ]
     return dims
 
@@ -222,8 +222,7 @@ class DashboardPlanner:
             top_dim = eligible_dims[0]
             # Verify if (count_metric, top_dim) was already placed by chart 3
             already_charted = any(
-                c.metric == count_metric.name and c.dimensions == [top_dim.name]
-                for c in charts
+                c.metric == count_metric.name and c.dimensions == [top_dim.name] for c in charts
             )
             if already_charted:
                 if len(eligible_dims) >= 2:

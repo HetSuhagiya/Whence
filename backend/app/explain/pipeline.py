@@ -208,21 +208,21 @@ def step_driver_search(
                 continue
         if metric_type == "additive":
             contribs, offsets, has_off = compute_additive_contributions(
-                baseline_segments=ddata.get("baseline_values", {}),
-                current_segments=ddata.get("current_values", {}),
-                baseline_counts=ddata.get("baseline_counts"),
-                current_counts=ddata.get("current_counts"),
+                baseline_segments=ddata.get("baseline_values") or ddata.get("baseline", {}),
+                current_segments=ddata.get("current_values") or ddata.get("current", {}),
+                baseline_counts=ddata.get("baseline_counts") or ddata.get("rows_baseline"),
+                current_counts=ddata.get("current_counts") or ddata.get("rows_current"),
                 dimension_name=dim_name,
                 min_rows=min_rows,
             )
         else:
             contribs, offsets, has_off = compute_ratio_rate_mix_split(
-                baseline_num=ddata.get("baseline_num", {}),
-                baseline_den=ddata.get("baseline_den", {}),
-                current_num=ddata.get("current_num", {}),
-                current_den=ddata.get("current_den", {}),
-                baseline_counts=ddata.get("baseline_counts"),
-                current_counts=ddata.get("current_counts"),
+                baseline_num=ddata.get("baseline_num") or ddata.get("baseline", {}),
+                baseline_den=ddata.get("baseline_den") or ddata.get("rows_baseline", {}),
+                current_num=ddata.get("current_num") or ddata.get("current", {}),
+                current_den=ddata.get("current_den") or ddata.get("rows_current", {}),
+                baseline_counts=ddata.get("baseline_counts") or ddata.get("rows_baseline"),
+                current_counts=ddata.get("current_counts") or ddata.get("rows_current"),
                 dimension_name=dim_name,
                 min_rows=min_rows,
             )
@@ -519,11 +519,22 @@ def step_assemble_evidence(
     confidence_reason: str,
     is_complete: bool,
     warning_messages: list[str] | None = None,
+    dimension_waterfalls: dict[str, list[DriverContribution]] | None = None,
+    dimension_shares: dict[str, float] | None = None,
+    segment_lift: dict[str, dict[str, float]] | None = None,
+    timing_strip: list[dict[str, Any]] | None = None,
+    timing_summary: str = "",
+    segment_comparison_table: list[dict[str, Any]] | None = None,
+    ratio_decomposition: dict[str, Any] | None = None,
+    ruled_out_dimensions: list[str] | None = None,
+    confidence_breakdown: list[dict[str, Any]] | None = None,
+    next_inquiries: list[str] | None = None,
 ) -> Evidence:
     """Step 10: Assembles complete Evidence object."""
     delta = current_value - baseline_value
     pct_change = (delta / baseline_value * 100.0) if abs(baseline_value) > 1e-9 else 0.0
 
+    seg_lift = segment_lift or {}
     return Evidence(
         id=str(uuid.uuid4()),
         metric_name=metric_name,
@@ -548,4 +559,15 @@ def step_assemble_evidence(
         confidence_reason=confidence_reason,
         is_complete=is_complete,
         warning_messages=warning_messages or [],
+        dimension_waterfalls=dimension_waterfalls or {},
+        dimension_shares=dimension_shares or {},
+        segment_lift=seg_lift,
+        lift_by_segment=seg_lift,
+        timing_strip=timing_strip or [],
+        timing_summary=timing_summary,
+        segment_comparison_table=segment_comparison_table or [],
+        ratio_decomposition=ratio_decomposition,
+        ruled_out_dimensions=ruled_out_dimensions or [],
+        confidence_breakdown=confidence_breakdown or [],
+        next_inquiries=next_inquiries or [],
     )

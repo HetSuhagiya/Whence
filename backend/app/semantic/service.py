@@ -3,14 +3,22 @@ import time
 import uuid
 from typing import Any
 
-from app.adapters.base import validate_metric_expression
+from app.adapters.base import (
+    validate_dimension_expression,
+    validate_metric_expression,
+)
 from app.adapters.bigquery_adapter import BigQueryAdapter
 from app.adapters.duckdb_adapter import DuckDBAdapter
 from app.connections.service import connection_service
 from app.db import get_connection_db
 from app.semantic.models import (
     AutoSuggestResponse,
+    DependentChart,
+    DependentDashboard,
     DimensionCreate,
+    DimensionPreviewRequest,
+    DimensionPreviewResponse,
+    DimensionPreviewValue,
     DimensionPublic,
     DimensionType,
     DimensionUpdate,
@@ -25,6 +33,7 @@ from app.semantic.models import (
     MetricValidateResponse,
     MetricVersionPublic,
     ModelCreate,
+    ModelDependentsResponse,
     ModelJoin,
     ModelPublic,
     ModelUpdate,
@@ -108,10 +117,30 @@ class SemanticService:
             client = connection_service._get_bq_client(
                 connection_id, billing_project=conn.billing_project
             )
+            location = conn.location
+            if location == "US" or not location:
+                sources = connection_service.get_sources(connection_id)
+                if sources:
+                    try:
+                        first_s = sources[0]
+                        table_ref = client.get_table(
+                            f"{first_s.project_id}.{first_s.dataset_id}.{first_s.table_name}"
+                        )
+                        loc = getattr(table_ref, "location", None)
+                        if isinstance(loc, str) and loc:
+                            location = loc
+                            db = self._get_db()
+                            db.execute(
+                                "UPDATE connections SET location = ? WHERE id = ?",
+                                (location, connection_id),
+                            )
+                            db.commit()
+                    except Exception:
+                        pass
             return BigQueryAdapter(
                 project_id=conn.project_id or "",
                 dataset_id="thelook_ecommerce",
-                location=conn.location,
+                location=location,
                 client=client,
             )
 
@@ -186,6 +215,10 @@ class SemanticService:
                 label=d["label"],
                 is_identifier=bool(d["is_identifier"]),
                 exclude_from_explanation=bool(d["exclude_from_explanation"]),
+                is_custom=bool(d["is_custom"])
+                if "is_custom" in d.keys() and d["is_custom"] is not None
+                else False,
+                expression=d["expression"] if "expression" in d.keys() else None,
                 created_at=d["created_at"],
                 updated_at=d["updated_at"],
             )
@@ -208,6 +241,9 @@ class SemanticService:
                 display_format=m["display_format"],
                 higher_is_better=bool(m["higher_is_better"]),
                 version=m["version"],
+                guided_config=json.loads(m["guided_config"])
+                if "guided_config" in m.keys() and m["guided_config"]
+                else None,
                 created_at=m["created_at"],
                 updated_at=m["updated_at"],
             )
@@ -303,6 +339,81 @@ class SemanticService:
             raise KeyError(f"Model '{model_id}' not found.")
         db.commit()
 
+    def get_model_dependents(
+        self,
+        model_id: str,
+        metric_name: str | None = None,
+        dimension_name: str | None = None,
+    ) -> ModelDependentsResponse:
+        self.get_model(model_id)  # Validate model exists (raises KeyError if not found)
+        db = self._get_db()
+        cur = db.cursor()
+
+        cur.execute("SELECT id, name FROM dashboards WHERE model_id = ?", (model_id,))
+        dashboards_rows = cur.fetchall()
+        dashboards_map = {d["id"]: d["name"] for d in dashboards_rows}
+
+        cur.execute(
+            """
+            SELECT dc.id, dc.dashboard_id, dc.title, dc.chart_type, dc.chart_spec, d.name as dashboard_name
+            FROM dashboard_charts dc
+            JOIN dashboards d ON dc.dashboard_id = d.id
+            WHERE d.model_id = ?
+            """,
+            (model_id,),
+        )
+        chart_rows = cur.fetchall()
+
+        matching_charts: list[DependentChart] = []
+        for cr in chart_rows:
+            spec: dict[str, Any] = {}
+            if cr["chart_spec"]:
+                try:
+                    spec = json.loads(cr["chart_spec"])
+                except Exception:
+                    spec = {}
+
+            if metric_name and spec.get("metric") != metric_name:
+                continue
+
+            if dimension_name:
+                dims = spec.get("dimensions", [])
+                filters = spec.get("filters", [])
+                filter_dims = [f.get("dimension") for f in filters if isinstance(f, dict)]
+                if dimension_name not in dims and dimension_name not in filter_dims:
+                    continue
+
+            matching_charts.append(
+                DependentChart(
+                    id=cr["id"],
+                    dashboard_id=cr["dashboard_id"],
+                    dashboard_name=cr["dashboard_name"],
+                    title=cr["title"],
+                    chart_type=cr["chart_type"],
+                    metric=spec.get("metric"),
+                    dimensions=spec.get("dimensions", []),
+                )
+            )
+
+        if metric_name or dimension_name:
+            matching_dash_ids = {c.dashboard_id for c in matching_charts}
+            matching_dashboards = [
+                DependentDashboard(id=did, name=dname)
+                for did, dname in dashboards_map.items()
+                if did in matching_dash_ids
+            ]
+        else:
+            matching_dashboards = [
+                DependentDashboard(id=did, name=dname) for did, dname in dashboards_map.items()
+            ]
+
+        return ModelDependentsResponse(
+            dashboard_count=len(matching_dashboards),
+            dashboards=matching_dashboards,
+            chart_count=len(matching_charts),
+            charts=matching_charts,
+        )
+
     # -------------------------------------------------------------
     # Dimensions CRUD
     # -------------------------------------------------------------
@@ -312,17 +423,33 @@ class SemanticService:
         db = self._get_db()
         cur = db.cursor()
 
-        # Verify model exists
-        cur.execute("SELECT id FROM models WHERE id = ?", (model_id,))
-        if not cur.fetchone():
+        # Verify model exists and get dialect
+        cur.execute(
+            """
+            SELECT m.id, c.warehouse_type
+            FROM models m
+            JOIN connections c ON m.connection_id = c.id
+            WHERE m.id = ?
+            """,
+            (model_id,),
+        )
+        row = cur.fetchone()
+        if not row:
             raise KeyError(f"Model '{model_id}' not found.")
+        dialect = row["warehouse_type"] if row else "duckdb"
+
+        # If custom dimension expression provided, validate it
+        expr_to_validate = req.expression or (req.column_expression if req.is_custom else None)
+        if expr_to_validate and req.is_custom:
+            validate_dimension_expression(expr_to_validate, dialect=dialect)
 
         cur.execute(
             """
             INSERT INTO dimensions (
                 id, model_id, name, column_expression, dimension_type, label,
-                is_identifier, exclude_from_explanation, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                is_identifier, exclude_from_explanation, is_custom, expression,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 dim_id,
@@ -333,6 +460,8 @@ class SemanticService:
                 req.label or req.name,
                 1 if req.is_identifier else 0,
                 1 if req.exclude_from_explanation else 0,
+                1 if req.is_custom else 0,
+                req.expression,
                 now,
                 now,
             ),
@@ -357,6 +486,10 @@ class SemanticService:
             label=d["label"],
             is_identifier=bool(d["is_identifier"]),
             exclude_from_explanation=bool(d["exclude_from_explanation"]),
+            is_custom=bool(d["is_custom"])
+            if "is_custom" in d.keys() and d["is_custom"] is not None
+            else False,
+            expression=d["expression"] if "expression" in d.keys() else None,
             created_at=d["created_at"],
             updated_at=d["updated_at"],
         )
@@ -365,13 +498,37 @@ class SemanticService:
         now = time.time()
         db = self._get_db()
         cur = db.cursor()
-        cur.execute("SELECT * FROM dimensions WHERE id = ?", (dim_id,))
+        cur.execute(
+            """
+            SELECT d.*, c.warehouse_type
+            FROM dimensions d
+            JOIN models m ON d.model_id = m.id
+            JOIN connections c ON m.connection_id = c.id
+            WHERE d.id = ?
+            """,
+            (dim_id,),
+        )
         d = cur.fetchone()
         if not d:
             raise KeyError(f"Dimension '{dim_id}' not found.")
+        dialect = d["warehouse_type"] if d else "duckdb"
 
         new_expr = (
             req.column_expression if req.column_expression is not None else d["column_expression"]
+        )
+        new_custom_expr = (
+            req.expression
+            if req.expression is not None
+            else (d["expression"] if "expression" in d.keys() else None)
+        )
+        new_is_custom = (
+            req.is_custom
+            if req.is_custom is not None
+            else (
+                bool(d["is_custom"])
+                if "is_custom" in d.keys() and d["is_custom"] is not None
+                else False
+            )
         )
         new_type = req.dimension_type if req.dimension_type is not None else d["dimension_type"]
         new_label = req.label if req.label is not None else d["label"]
@@ -390,14 +547,28 @@ class SemanticService:
             else 0
         )
 
+        if new_custom_expr and new_is_custom:
+            validate_dimension_expression(new_custom_expr, dialect=dialect)
+
         cur.execute(
             """
             UPDATE dimensions
             SET column_expression = ?, dimension_type = ?, label = ?,
-                is_identifier = ?, exclude_from_explanation = ?, updated_at = ?
+                is_identifier = ?, exclude_from_explanation = ?,
+                is_custom = ?, expression = ?, updated_at = ?
             WHERE id = ?
             """,
-            (new_expr, new_type, new_label, new_id_flag, new_exclude, now, dim_id),
+            (
+                new_expr,
+                new_type,
+                new_label,
+                new_id_flag,
+                new_exclude,
+                1 if new_is_custom else 0,
+                new_custom_expr,
+                now,
+                dim_id,
+            ),
         )
         db.commit()
         return self.get_dimension(dim_id)
@@ -437,14 +608,15 @@ class SemanticService:
         now = time.time()
         metric_id = str(uuid.uuid4())
         version = 1
+        guided_config_json = json.dumps(req.guided_config) if req.guided_config else None
 
         cur.execute(
             """
             INSERT INTO metrics (
                 id, model_id, name, description, metric_type, numerator_expr,
                 denominator_expr, fixed_filter, display_format, higher_is_better,
-                version, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                version, guided_config, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 metric_id,
@@ -458,6 +630,7 @@ class SemanticService:
                 req.display_format,
                 1 if req.higher_is_better else 0,
                 version,
+                guided_config_json,
                 now,
                 now,
             ),
@@ -508,6 +681,9 @@ class SemanticService:
             display_format=m["display_format"],
             higher_is_better=bool(m["higher_is_better"]),
             version=m["version"],
+            guided_config=json.loads(m["guided_config"])
+            if "guided_config" in m.keys() and m["guided_config"]
+            else None,
             created_at=m["created_at"],
             updated_at=m["updated_at"],
         )
@@ -548,6 +724,11 @@ class SemanticService:
             )
             else 0
         )
+        new_guided_config = (
+            json.dumps(req.guided_config)
+            if req.guided_config is not None
+            else (m["guided_config"] if "guided_config" in m.keys() else None)
+        )
 
         # Validate
         validate_metric_expression(new_num, dialect=dialect)
@@ -562,7 +743,7 @@ class SemanticService:
             UPDATE metrics
             SET name = ?, description = ?, metric_type = ?, numerator_expr = ?,
                 denominator_expr = ?, fixed_filter = ?, display_format = ?,
-                higher_is_better = ?, version = ?, updated_at = ?
+                higher_is_better = ?, version = ?, guided_config = ?, updated_at = ?
             WHERE id = ?
             """,
             (
@@ -575,6 +756,7 @@ class SemanticService:
                 new_fmt,
                 new_higher,
                 new_version,
+                new_guided_config,
                 now,
                 metric_id,
             ),
@@ -739,6 +921,99 @@ class SemanticService:
                 points=[],
                 total_value=0.0,
                 unit="$",
+            )
+
+    async def preview_dimension(self, req: DimensionPreviewRequest) -> DimensionPreviewResponse:
+        try:
+            model = self.get_model(req.model_id)
+        except KeyError:
+            return DimensionPreviewResponse(valid=False, error=f"Model '{req.model_id}' not found.")
+
+        adapter = self.get_adapter_for_connection(req.connection_id)
+        clean_dialect = adapter.dialect
+
+        # Gather allowed columns from model sources if available
+        allowed_cols = None
+        try:
+            sources = connection_service.get_sources(req.connection_id)
+            target_source = next((s for s in sources if s.table_name == model.table_name), None)
+            if target_source:
+                allowed_cols = {col.name.lower() for col in target_source.columns}
+        except Exception:
+            pass
+
+        try:
+            validate_dimension_expression(
+                req.expression, dialect=clean_dialect, allowed_columns=allowed_cols
+            )
+        except Exception as e:
+            return DimensionPreviewResponse(valid=False, error=str(e))
+
+        table_ref = (
+            f"`{model.project_id}.{model.dataset_id}.{model.table_name}`"
+            if clean_dialect == "bigquery"
+            else f'"{model.table_name}"'
+        )
+        time_col = model.primary_time_column
+
+        where_conds = [f"{time_col} IS NOT NULL"] if time_col else []
+        if model.require_partition_filter and model.anchor_date:
+            part_col = model.partition_column or model.primary_time_column
+            anchor_d = model.anchor_date[:10]
+            if clean_dialect == "bigquery":
+                where_conds.append(f"{part_col} >= DATE_SUB(DATE('{anchor_d}'), INTERVAL 90 DAY)")
+            else:
+                where_conds.append(f"{part_col} >= CAST('{anchor_d}' AS DATE) - INTERVAL 90 DAY")
+
+        where_clause = f"WHERE {' AND '.join(where_conds)}" if where_conds else ""
+
+        preview_sql = f"""
+        SELECT
+            {req.expression} AS preview_val,
+            COUNT(*) AS row_count
+        FROM {table_ref}
+        {where_clause}
+        GROUP BY 1
+        ORDER BY 2 DESC
+        LIMIT 20
+        """.strip()
+
+        # Dry-run first to enforce byte cap
+        try:
+            dry_run = await adapter.dry_run(preview_sql)
+            if not dry_run.valid:
+                return DimensionPreviewResponse(
+                    valid=False,
+                    estimated_bytes=dry_run.bytes_scanned,
+                    formatted_bytes=dry_run.formatted_bytes,
+                    error=dry_run.error or "Dry-run failed",
+                )
+        except Exception as e:
+            return DimensionPreviewResponse(valid=False, error=f"Dry run error: {e}")
+
+        # Execute query
+        try:
+            q_res = await adapter.run(preview_sql)
+            values = [
+                DimensionPreviewValue(
+                    value=r.get("preview_val") if r.get("preview_val") is not None else "(empty)",
+                    row_count=int(r.get("row_count", 0)),
+                )
+                for r in q_res.rows
+            ]
+            return DimensionPreviewResponse(
+                valid=True,
+                estimated_bytes=dry_run.bytes_scanned,
+                formatted_bytes=dry_run.formatted_bytes,
+                values=values,
+                total_distinct_values=len(values),
+            )
+        except Exception as e:
+            return DimensionPreviewResponse(
+                valid=False,
+                estimated_bytes=dry_run.bytes_scanned,
+                formatted_bytes=dry_run.formatted_bytes,
+                error=f"Query execution error: {e}",
             )
 
     async def discover_and_set_anchor_date(self, model_id: str) -> ModelPublic:

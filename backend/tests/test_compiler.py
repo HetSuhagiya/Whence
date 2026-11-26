@@ -461,6 +461,7 @@ def test_compiler_golden_sql_snapshots_all_chart_types(ecommerce_model_id: str) 
             assert "revenue" in compiled.sql
             assert compiled.dialect == dialect
 
+
 def test_compiler_anchor_date_computation_duckdb() -> None:
     # Test that QueryCompiler compiles date filters using Python-computed windows from model.anchor_date
     conn = connection_service.create_connection(
@@ -475,7 +476,11 @@ def test_compiler_anchor_date_computation_duckdb() -> None:
             table_name="thelook_ecommerce_orders",
             primary_time_column="created_at",
             anchor_date="2024-05-31",
-            metrics=[MetricCreate(name="revenue", numerator_expr="SUM(sale_price)", metric_type="additive")],
+            metrics=[
+                MetricCreate(
+                    name="revenue", numerator_expr="SUM(sale_price)", metric_type="additive"
+                )
+            ],
         )
     )
 
@@ -487,7 +492,11 @@ def test_compiler_anchor_date_computation_duckdb() -> None:
     compiled = query_compiler.compile(spec, dialect="duckdb")
     assert "CURRENT_DATE" not in compiled.sql
     assert "CURRENT_TIMESTAMP" not in compiled.sql
-    assert "2024-05-01" in compiled.sql or "2024-05-31" in compiled.sql or "start_date" in compiled.params
+    assert (
+        "2024-05-01" in compiled.sql
+        or "2024-05-31" in compiled.sql
+        or "start_date" in compiled.params
+    )
 
 
 def test_compiler_type_aware_parameters_and_casts() -> None:
@@ -540,5 +549,9 @@ def test_compiler_custom_date_range_dict() -> None:
         date_range={"start": "2023-01-01", "end": "2023-01-31"},
     )
     compiled = query_compiler.compile(spec, dialect="duckdb")
-    assert "2023-01-01" in str(compiled.sql) or compiled.params.get("start_date", "").startswith("2023-01-01")
-    assert "2023-01-31" in str(compiled.sql) or compiled.params.get("end_date", "").startswith("2023-01-31")
+    assert "2023-01-01" in str(compiled.sql) or compiled.params.get("start_date", "").startswith(
+        "2023-01-01"
+    )
+    assert "2023-01-31" in str(compiled.sql) or compiled.params.get("end_date", "").startswith(
+        "2023-01-31"
+    )

@@ -4,6 +4,8 @@ from app.semantic.models import (
     AutoSuggestResponse,
     DefaultEcommerceSetRequest,
     DimensionCreate,
+    DimensionPreviewRequest,
+    DimensionPreviewResponse,
     DimensionPublic,
     DimensionUpdate,
     MetricCreate,
@@ -15,6 +17,7 @@ from app.semantic.models import (
     MetricValidateResponse,
     MetricVersionPublic,
     ModelCreate,
+    ModelDependentsResponse,
     ModelPublic,
     ModelUpdate,
 )
@@ -73,6 +76,18 @@ async def delete_model(model_id: str) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
+@router.get("/models/{model_id}/dependents", response_model=ModelDependentsResponse)
+async def get_model_dependents(
+    model_id: str,
+    metric_name: str | None = Query(None),
+    dimension_name: str | None = Query(None),
+) -> ModelDependentsResponse:
+    try:
+        return semantic_service.get_model_dependents(model_id, metric_name, dimension_name)
+    except KeyError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
 # -------------------------------------------------------------
 # Dimensions Endpoints
 # -------------------------------------------------------------
@@ -88,6 +103,14 @@ async def create_dimension(model_id: str, req: DimensionCreate) -> DimensionPubl
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+@router.post("/dimensions/preview", response_model=DimensionPreviewResponse)
+async def preview_dimension(req: DimensionPreviewRequest) -> DimensionPreviewResponse:
+    try:
+        return await semantic_service.preview_dimension(req)
+    except Exception as e:
+        return DimensionPreviewResponse(valid=False, error=str(e))
 
 
 @router.put("/dimensions/{dim_id}", response_model=DimensionPublic)

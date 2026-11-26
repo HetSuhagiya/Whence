@@ -11,6 +11,7 @@ from app.compiler.spec import ChartSpec, FilterCondition
 from app.connections.service import connection_service
 from app.dashboards.models import (
     ChartRunRequest,
+    DashboardChartCreate,
     DashboardChartPublic,
     DashboardCreate,
     DashboardPublic,
@@ -166,8 +167,12 @@ class DashboardService:
                     warehouse_type=r["warehouse_type"],
                     model_id=r["model_id"],
                     model_name=r["model_name"] if "model_name" in r.keys() else None,
-                    model_description=r["model_description"] if "model_description" in r.keys() else None,
-                    primary_time_column=r["primary_time_column"] if "primary_time_column" in r.keys() else None,
+                    model_description=r["model_description"]
+                    if "model_description" in r.keys()
+                    else None,
+                    primary_time_column=r["primary_time_column"]
+                    if "primary_time_column" in r.keys()
+                    else None,
                     charts=charts,
                     skipped_charts=skipped_notes,
                     created_at=r["created_at"],
@@ -221,9 +226,7 @@ class DashboardService:
         ]
 
         skipped_raw = (
-            r["skipped_charts"]
-            if "skipped_charts" in r.keys() and r["skipped_charts"]
-            else "[]"
+            r["skipped_charts"] if "skipped_charts" in r.keys() and r["skipped_charts"] else "[]"
         )
         try:
             skipped_items = json.loads(skipped_raw)
@@ -242,7 +245,9 @@ class DashboardService:
             model_id=r["model_id"],
             model_name=r["model_name"] if "model_name" in r.keys() else None,
             model_description=r["model_description"] if "model_description" in r.keys() else None,
-            primary_time_column=r["primary_time_column"] if "primary_time_column" in r.keys() else None,
+            primary_time_column=r["primary_time_column"]
+            if "primary_time_column" in r.keys()
+            else None,
             charts=charts,
             skipped_charts=skipped_notes,
             created_at=r["created_at"],
@@ -253,6 +258,80 @@ class DashboardService:
         db = get_connection_db()
         cur = db.cursor()
         cur.execute("DELETE FROM dashboards WHERE id = ?", (dashboard_id,))
+        db.commit()
+        db.close()
+
+    def add_chart(self, dashboard_id: str, req: DashboardChartCreate) -> DashboardChartPublic:
+        dash = self.get_dashboard(dashboard_id)
+        model = semantic_service.get_model(dash.model_id)
+
+        if req.chart_spec:
+            spec = req.chart_spec.model_copy(deep=True)
+            if not spec.model_id:
+                spec.model_id = model.id
+        else:
+            dims = [req.breakdown_dimension] if req.breakdown_dimension else []
+            time_grain = req.time_grain
+            chart_type = req.chart_type
+            if not dims and not time_grain:
+                time_grain = "day"
+
+            title = req.title
+            if not title:
+                metric_clean = req.metric.replace("_", " ").capitalize()
+                if dims:
+                    dim_clean = dims[0].replace("_", " ")
+                    title = f"{metric_clean} by {dim_clean}"
+                else:
+                    title = f"{metric_clean} over time"
+
+            spec = ChartSpec(
+                model_id=model.id,
+                metric=req.metric,
+                dimensions=dims,
+                time_grain=time_grain if not dims else None,  # type: ignore[arg-type]
+                date_range=req.date_range or "last_30_days",
+                chart_type=chart_type,  # type: ignore[arg-type]
+                title=title,
+                limit=10 if dims else None,
+            )
+
+        now = time.time()
+        c_id = str(uuid.uuid4())
+        pos = len(dash.charts)
+
+        db = get_connection_db()
+        cur = db.cursor()
+        cur.execute(
+            """
+            INSERT INTO dashboard_charts (id, dashboard_id, title, chart_type, chart_spec, position, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (c_id, dashboard_id, spec.title, spec.chart_type, spec.model_dump_json(), pos, now),
+        )
+        db.commit()
+        db.close()
+
+        return DashboardChartPublic(
+            id=c_id,
+            dashboard_id=dashboard_id,
+            title=spec.title,
+            chart_type=spec.chart_type,
+            chart_spec=spec,
+            position=pos,
+            created_at=now,
+        )
+
+    def delete_chart(self, dashboard_id: str, chart_id: str) -> None:
+        db = get_connection_db()
+        cur = db.cursor()
+        cur.execute(
+            "DELETE FROM dashboard_charts WHERE dashboard_id = ? AND id = ?",
+            (dashboard_id, chart_id),
+        )
+        if cur.rowcount == 0:
+            db.close()
+            raise ValueError(f"Chart '{chart_id}' not found on dashboard '{dashboard_id}'.")
         db.commit()
         db.close()
 
@@ -417,7 +496,8 @@ class DashboardService:
             active_dims = [
                 d
                 for d in model.dimensions
-                if not d.exclude_from_explanation and d.dimension_type == "categorical"
+                if not d.exclude_from_explanation
+                and d.dimension_type in ("categorical", "numeric_bucket")
             ]
             if not active_dims and model.dimensions:
                 active_dims = [model.dimensions[0]]
@@ -425,15 +505,16 @@ class DashboardService:
             dimension_data: dict[str, dict[str, Any]] = {}
             for dim in active_dims[:3]:
                 # Query dimension breakdown for baseline and current
-                dim_col = dim.column_expression
+                dim_col = dim.expression or dim.column_expression
                 time_col = model.primary_time_column
                 table_target = model.table_name
+                metric_calc = metric_meta.numerator_expr if metric_meta else "COUNT(*)"
 
                 # Compile safe breakdown queries through adapter
                 sql_dim = f"""
                 SELECT
                     {dim_col} as segment,
-                    COALESCE(SUM(sale_price), COUNT(*)) as segment_val,
+                    COALESCE({metric_calc}, 0) as segment_val,
                     COUNT(*) as segment_rows
                 FROM {table_target}
                 WHERE {time_col} IS NOT NULL

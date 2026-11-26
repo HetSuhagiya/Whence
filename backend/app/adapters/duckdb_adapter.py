@@ -103,7 +103,9 @@ class DuckDBAdapter(WarehouseAdapter):
             tables=table_infos,
         )
 
-    async def _execute_dry_run(self, sql: str, params: dict[str, Any] | None = None) -> DryRunResult:
+    async def _execute_dry_run(
+        self, sql: str, params: dict[str, Any] | None = None
+    ) -> DryRunResult:
         """Validates query via EXPLAIN in DuckDB and estimates scan size."""
         try:
             # Use EXPLAIN to validate SQL syntax and get execution plan

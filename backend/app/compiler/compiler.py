@@ -107,7 +107,7 @@ class QueryCompiler:
                 )
             dim_obj = dim_map[dim_name]
             alias = self.quote_identifier(dim_name, clean_dialect)
-            expr = dim_obj.column_expression
+            expr = dim_obj.expression or dim_obj.column_expression
             if expr == dim_name:
                 expr = self.quote_identifier(expr, clean_dialect)
             selected_dim_exprs.append((alias, expr))
@@ -169,11 +169,11 @@ class QueryCompiler:
                 if time_type == "DATE":
                     time_expr = f"FORMAT_DATE('%Y-%m-%d', DATE_TRUNC({time_ref}, {bq_grain}))"
                 elif time_type == "DATETIME":
-                    time_expr = f"FORMAT_DATETIME('%Y-%m-%d', DATETIME_TRUNC({time_ref}, {bq_grain}))"
-                else:
                     time_expr = (
-                        f"FORMAT_DATE('%Y-%m-%d', DATE(TIMESTAMP_TRUNC({time_ref}, {bq_grain}, 'UTC')))"
+                        f"FORMAT_DATETIME('%Y-%m-%d', DATETIME_TRUNC({time_ref}, {bq_grain}))"
                     )
+                else:
+                    time_expr = f"FORMAT_DATE('%Y-%m-%d', DATE(TIMESTAMP_TRUNC({time_ref}, {bq_grain}, 'UTC')))"
             else:
                 duck_grain_map = {
                     "day": "day",
@@ -265,7 +265,12 @@ class QueryCompiler:
         for i, f in enumerate(spec.filters):
             if f.dimension not in dim_map:
                 continue
-            dim_expr = dim_map[f.dimension].column_expression
+            dim_target = dim_map[f.dimension]
+            dim_expr = (
+                dim_target.expression
+                if (dim_target.is_custom and dim_target.expression)
+                else dim_target.column_expression
+            )
             param_key = f"filter_{i}"
             params[param_key] = f.value
             if clean_dialect == "bigquery":
@@ -278,11 +283,20 @@ class QueryCompiler:
             where_clause = "WHERE " + " AND ".join(where_conditions)
 
         # 5. Group by & Order by clauses
+        has_custom_dim = any(
+            d.is_custom or bool(d.expression and d.expression != d.column_expression)
+            for d in [dim_map.get(name) for name in spec.dimensions if name in dim_map]
+            if d
+        )
+
         group_by_clause = ""
         if selected_dim_exprs:
-            group_by_clause = "GROUP BY " + ", ".join(
-                str(i + 1) for i in range(len(selected_dim_exprs))
-            )
+            if has_custom_dim:
+                group_by_clause = "GROUP BY " + ", ".join(expr for _, expr in selected_dim_exprs)
+            else:
+                group_by_clause = "GROUP BY " + ", ".join(
+                    str(i + 1) for i in range(len(selected_dim_exprs))
+                )
 
         if spec.time_grain:
             order_by_clause = "ORDER BY 1 ASC"

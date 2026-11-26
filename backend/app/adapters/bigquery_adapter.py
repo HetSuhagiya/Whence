@@ -1,11 +1,23 @@
 import asyncio
+import datetime
 import json
 import time
-import datetime
 from typing import Any
 
 from google.cloud import bigquery
 from google.oauth2 import service_account
+
+from app.adapters.base import (
+    ColumnInfo,
+    DryRunResult,
+    QueryResult,
+    QueryTimeoutError,
+    SchemaIntrospection,
+    TableInfo,
+    WarehouseAdapter,
+)
+from app.config import get_settings
+from app.crypto import CredentialCrypto
 
 
 def _to_bq_query_parameters(params: dict[str, Any] | None) -> list[bigquery.ScalarQueryParameter]:
@@ -28,19 +40,6 @@ def _to_bq_query_parameters(params: dict[str, Any] | None) -> list[bigquery.Scal
             v = str(v)
         bq_params.append(bigquery.ScalarQueryParameter(k, ptype, v))
     return bq_params
-
-
-from app.adapters.base import (
-    ColumnInfo,
-    DryRunResult,
-    QueryResult,
-    QueryTimeoutError,
-    SchemaIntrospection,
-    TableInfo,
-    WarehouseAdapter,
-)
-from app.config import get_settings
-from app.crypto import CredentialCrypto
 
 
 class BigQueryAdapter(WarehouseAdapter):
@@ -242,7 +241,9 @@ class BigQueryAdapter(WarehouseAdapter):
                 ],
             )
 
-    async def _execute_dry_run(self, sql: str, params: dict[str, Any] | None = None) -> DryRunResult:
+    async def _execute_dry_run(
+        self, sql: str, params: dict[str, Any] | None = None
+    ) -> DryRunResult:
         """
         Executes a dry-run BigQuery query job to accurately estimate bytes processed
         without incurring costs or running the query.

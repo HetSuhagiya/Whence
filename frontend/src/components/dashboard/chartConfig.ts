@@ -27,23 +27,53 @@ ChartJS.register(
 );
 
 export const CHART_COLORS = {
-  primary: "#4E79A7",
-  waterfallUp: "#59A14F",
-  waterfallDown: "#E15759",
-  gridLine: "rgba(205, 206, 214, 0.3)",
+  // Ink tokens (slate12)
+  inkLight: "#111827",
+  inkDark: "#F9FAFB",
+  primary: "#111827", // default ink series
+  baseline: "#889096", // slate8 previous period comparison
+  highlight: "#0090FF", // blue9 explained point ring / highlight
+  
+  // Waterfall: Radix green9 and red9
+  waterfallUp: "#30A46C",
+  waterfallUpDark: "#3DD68C",
+  waterfallDown: "#E54D2E",
+  waterfallDownDark: "#F3705A",
+
+  // Grid and labels
+  gridLine: "rgba(205, 206, 214, 0.4)",
+  gridLineDark: "rgba(67, 72, 78, 0.4)",
   textMuted: "#60646c",
-  textMain: "#1c2024",
+  textMutedDark: "#b0b4ba",
+  textMain: "#111827",
+  textMainDark: "#F9FAFB",
+
+  // Paul Tol muted scheme (exact order)
   series: [
-    "#4E79A7",
-    "#F28E2B",
-    "#E15759",
-    "#76B7B2",
-    "#59A14F",
-    "#EDC948",
-    "#B07AA1",
-    "#FF9DA7",
-    "#9C755F",
-    "#BAB0AC",
+    "#332288",
+    "#88CCEE",
+    "#44AA99",
+    "#117733",
+    "#999933",
+    "#DDCC77",
+    "#CC6677",
+    "#882255",
+    "#AA4499",
+    "#DDDDDD",
+  ],
+
+  // High-contrast variants for dark mode (>= 3:1 contrast against #111827 / #0F172A)
+  seriesDark: [
+    "#6F5ED3", // adjusted for dark bg contrast >= 3:1
+    "#88CCEE",
+    "#44AA99",
+    "#117733",
+    "#999933",
+    "#DDCC77",
+    "#CC6677",
+    "#BD4882", // adjusted for dark bg contrast >= 3:1
+    "#AA4499",
+    "#DDDDDD",
   ],
 };
 

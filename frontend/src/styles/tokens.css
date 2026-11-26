@@ -1,0 +1,47 @@
+/* Design System Tokens for Whence
+ * Conforms to WCAG 2.1 AA and 3:1 Graphical Contrast standards
+ */
+
+:root {
+  /* Ink series tokens */
+  --chart-ink: #111827;            /* slate12 light */
+  --chart-baseline: #889096;       /* slate8 */
+  --chart-highlight: #0090FF;      /* blue9 */
+
+  /* Paul Tol muted scheme (exact order) */
+  --chart-tol-1: #332288;
+  --chart-tol-2: #88CCEE;
+  --chart-tol-3: #44AA99;
+  --chart-tol-4: #117733;
+  --chart-tol-5: #999933;
+  --chart-tol-6: #DDCC77;
+  --chart-tol-7: #CC6677;
+  --chart-tol-8: #882255;
+  --chart-tol-9: #AA4499;
+  --chart-tol-10: #DDDDDD;
+
+  /* Waterfall: Radix green9 and red9 */
+  --waterfall-up: #30A46C;         /* Radix green9 light */
+  --waterfall-down: #E54D2E;       /* Radix red9 light */
+
+  /* High-contrast graphical variants for light backgrounds (>= 3:1 contrast against #FFFFFF) */
+  --chart-tol-2-contrast: #2E7599; /* 5.1:1 on #FFFFFF */
+  --chart-tol-3-contrast: #358376; /* 4.5:1 on #FFFFFF */
+  --chart-tol-6-contrast: #8F7F24; /* 4.0:1 on #FFFFFF */
+  --chart-tol-10-contrast: #767676; /* 4.5:1 on #FFFFFF */
+}
+
+.dark, [data-theme="dark"] {
+  /* Ink series tokens in dark mode */
+  --chart-ink: #F9FAFB;            /* slate12 dark */
+  --chart-baseline: #889096;       /* slate8 */
+  --chart-highlight: #0090FF;      /* blue9 */
+
+  /* Waterfall: Radix green9 and red9 dark mode */
+  --waterfall-up: #3DD68C;         /* Radix green9 dark */
+  --waterfall-down: #F3705A;       /* Radix red9 dark */
+
+  /* High-contrast graphical variants for dark backgrounds (>= 3:1 contrast against #111827 / #0F172A) */
+  --chart-tol-1-contrast: #6F5ED3; /* 3.6:1 on #111827 */
+  --chart-tol-8-contrast: #BD4882; /* 3.7:1 on #111827 */
+}

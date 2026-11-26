@@ -34,7 +34,7 @@ describe("Connection Flow Loading States", () => {
         project_id: "prod-project",
         billing_project: "prod-project",
         location: "US",
-        selected_tables_count: 2,
+        selected_tables_count: 0,
         created_at: 1000,
         updated_at: 1000,
       },

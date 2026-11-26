@@ -16,9 +16,12 @@ import {
   CheckItem,
   ConnectionPublic,
   ConnectionTestResult,
+  ModelPublic,
   TableDetail,
   TablePreviewResponse,
 } from "@/lib/api";
+import { StepIndicator, StepItem } from "@/components/navigation/StepIndicator";
+import { CreateDashboardDialog } from "@/components/dashboard/CreateDashboardDialog";
 import { SemanticLayerManager } from "@/components/semantic/SemanticLayerManager";
 import {
   AlertCircle,
@@ -138,6 +141,150 @@ export default function DataConnectionsPage() {
   const [liveChecks, setLiveChecks] = React.useState<LiveCheckDisplay[]>([]);
   const [isSavingConnection, setIsSavingConnection] = React.useState(false);
   const [sourcesSaved, setSourcesSaved] = React.useState(false);
+
+  // Workflow tracking across steps
+  const [models, setModels] = React.useState<ModelPublic[]>([]);
+  const [dashboardsCount, setDashboardsCount] = React.useState<number>(0);
+  const [isCreateDashboardOpen, setIsCreateDashboardOpen] = React.useState(false);
+
+  // Parse URL search params (?tab=model&connection_id=...)
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get("tab");
+      const connId = params.get("connection_id");
+      if (tab === "model" || tab === "semantic") {
+        setActiveTab("semantic");
+      } else if (tab === "connect" || tab === "connection") {
+        setActiveTab("connection");
+      }
+      if (connId) {
+        api
+          .listConnections()
+          .then((conns) => {
+            const found = conns.find((c) => c.id === connId);
+            if (found) setCurrentConnection(found);
+          })
+          .catch(() => {});
+      }
+    }
+  }, []);
+
+  // Load dashboards count for workflow step 4
+  React.useEffect(() => {
+    if (typeof api.listDashboards === "function") {
+      api
+        .listDashboards()
+        .then((list) => setDashboardsCount(list.length))
+        .catch(() => {});
+    }
+  }, []);
+
+  // Load models for current connection to track step 3 confirmation
+  React.useEffect(() => {
+    if (currentConnection && typeof api.listModels === "function") {
+      api
+        .listModels(currentConnection.id)
+        .then((m) => setModels(m))
+        .catch(() => setModels([]));
+    } else {
+      setModels([]);
+    }
+  }, [currentConnection]);
+
+  // Compute 4-step workflow indicator state
+  const workflowSteps: StepItem[] = React.useMemo(() => {
+    const hasConn = connections.length > 0;
+    const hasTables =
+      (currentConnection?.selected_tables_count || 0) > 0 ||
+      selectedTableNames.length > 0 ||
+      sourcesSaved;
+    const hasModel = models.length > 0;
+    const hasDashboards = dashboardsCount > 0;
+
+    // Step 1: Connect
+    let s1Status: StepItem["status"] = "current";
+    let s1Reason = "Connect BigQuery or local DuckDB warehouse";
+    if (hasConn) {
+      s1Status = "done";
+      s1Reason = `Connected: ${currentConnection?.name || "Warehouse"}`;
+    }
+
+    // Step 2: Choose data
+    let s2Status: StepItem["status"] = "upcoming";
+    let s2Reason = "Select warehouse tables";
+    if (!hasConn) {
+      s2Status = "blocked";
+      s2Reason = "Connect a warehouse first";
+    } else if (hasTables) {
+      s2Status = "done";
+      s2Reason = `${
+        currentConnection?.selected_tables_count || selectedTableNames.length || "Configured"
+      } tables selected`;
+    } else if (activeTab === "connection" && step === 2) {
+      s2Status = "current";
+      s2Reason = "Select tables to query";
+    }
+
+    // Step 3: Model
+    let s3Status: StepItem["status"] = "upcoming";
+    let s3Reason = "Confirm semantic model";
+    if (!hasConn) {
+      s3Status = "blocked";
+      s3Reason = "Connect a warehouse first";
+    } else if (!hasTables) {
+      s3Status = "blocked";
+      s3Reason = "Select tables before defining a model";
+    } else if (hasModel) {
+      s3Status = "done";
+      s3Reason = `Model confirmed (${models[0].name})`;
+    } else if (activeTab === "semantic") {
+      s3Status = "current";
+      s3Reason = "Confirm metrics and dimensions";
+    }
+
+    // Step 4: Dashboard
+    let s4Status: StepItem["status"] = "upcoming";
+    let s4Reason = "Ready to build dashboard";
+    if (!hasModel) {
+      s4Status = "blocked";
+      s4Reason = "Confirm a semantic model before building dashboards";
+    } else if (hasDashboards) {
+      s4Status = "done";
+      s4Reason = `${dashboardsCount} dashboard${dashboardsCount === 1 ? "" : "s"} ready`;
+    }
+
+    return [
+      { id: "connect", name: "Connect", status: s1Status, reason: s1Reason },
+      { id: "choose_data", name: "Choose data", status: s2Status, reason: s2Reason },
+      { id: "model", name: "Model", status: s3Status, reason: s3Reason },
+      { id: "dashboard", name: "Dashboard", status: s4Status, reason: s4Reason },
+    ];
+  }, [
+    connections.length,
+    currentConnection,
+    selectedTableNames.length,
+    sourcesSaved,
+    models,
+    dashboardsCount,
+    activeTab,
+    step,
+  ]);
+
+  const handleStepClick = (stepId: string) => {
+    if (stepId === "connect") {
+      setActiveTab("connection");
+      setStep(1);
+    } else if (stepId === "choose_data") {
+      setActiveTab("connection");
+      if (currentConnection) initializeStep2(currentConnection);
+      setStep(2);
+    } else if (stepId === "model") {
+      setActiveTab("semantic");
+    } else if (stepId === "dashboard") {
+      setIsCreateDashboardOpen(true);
+    }
+  };
 
   // Debounced Loading for Skeletons (no flash for waits < 200ms)
   const showMetadataSkeleton = useDebouncedLoading(metadataLoading, 200);
@@ -500,7 +647,7 @@ export default function DataConnectionsPage() {
     }
   };
 
-  // Step 3: Save Connection & Complete Flow
+  // Step 3: Save Connection & Complete Flow (immediately switches to Model tab)
   const handleFinalSave = async () => {
     setIsSavingConnection(true);
     setLoadingAnnouncement("Saving connection configuration...");
@@ -509,6 +656,8 @@ export default function DataConnectionsPage() {
       await new Promise((r) => setTimeout(r, 250));
       setSourcesSaved(true);
       setLoadingAnnouncement("Warehouse connection and sources saved successfully.");
+      // Auto-advance directly to Model tab with that connection preselected
+      setActiveTab("semantic");
     } finally {
       setIsSavingConnection(false);
     }
@@ -522,6 +671,12 @@ export default function DataConnectionsPage() {
       </div>
 
       <div className="flex flex-col gap-6 max-w-5xl mx-auto pb-16">
+        {/* Persistent 4-step progress header */}
+        <StepIndicator
+          steps={workflowSteps}
+          onStepClick={handleStepClick}
+        />
+
         {/* Top-Level Tabs: Connection vs Semantic Layer */}
         <div className="flex items-center gap-2 border-b border-[var(--border-hairline)]">
           <button
@@ -794,18 +949,34 @@ export default function DataConnectionsPage() {
                           </span>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setCurrentConnection(c);
-                              initializeStep2(c);
-                              setStep(2);
-                            }}
-                            title="Open connection"
-                          >
-                            Open
-                          </Button>
+                          {c.selected_tables_count === 0 ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setCurrentConnection(c);
+                                initializeStep2(c);
+                                setStep(2);
+                              }}
+                              title="Open connection"
+                              data-testid={`action-choose-tables-${c.id}`}
+                            >
+                              Choose tables
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setCurrentConnection(c);
+                                setActiveTab("semantic");
+                              }}
+                              title="Define semantic model"
+                              data-testid={`action-define-model-${c.id}`}
+                            >
+                              Define model
+                            </Button>
+                          )}
                           {c.warehouse_type === "bigquery" && (
                             <Button
                               size="sm"
@@ -1456,6 +1627,14 @@ export default function DataConnectionsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Create Dashboard Dialog */}
+      <CreateDashboardDialog
+        open={isCreateDashboardOpen}
+        onOpenChange={setIsCreateDashboardOpen}
+        connections={connections}
+        defaultConnectionId={currentConnection?.id}
+      />
     </AppShell>
   );
 }

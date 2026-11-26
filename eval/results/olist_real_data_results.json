@@ -3,7 +3,7 @@
     "name": "(a) Black Friday 2017 Spike",
     "baseline_window": "2017-11-13 to 2017-11-19",
     "current_window": "2017-11-20 to 2017-11-26",
-    "baseline_revenue": 175819.69000000026,
+    "baseline_revenue": 175819.68999999992,
     "current_revenue": 407169.0599999976,
     "delta_revenue": 231349.37,
     "percent_change": "+131.6%",
@@ -29,7 +29,47 @@
         "share": "15.5%"
       }
     ],
-    "offsetting_effects": false
+    "offsetting_effects": false,
+    "timing_summary": "Change was distributed relatively evenly across 7 periods",
+    "dimension_shares": {
+      "category": 0.9674,
+      "state": 0.9686
+    },
+    "ruled_out_dimensions": [],
+    "next_inquiries": [
+      "Did marketing promotions, pricing updates, or inventory shifts occur for 'SP' in state?",
+      "Were tracking instruments or schema migrations deployed around 2017-11-20?"
+    ],
+    "confidence_breakdown": [
+      {
+        "name": "Reporting Completeness",
+        "category": "completeness",
+        "status": "pass",
+        "score": 100,
+        "description": "Current period data is complete with no reporting lag detected."
+      },
+      {
+        "name": "Volatility & Noise",
+        "category": "volatility",
+        "status": "pass",
+        "score": 100,
+        "description": "Delta is outside normal historical volatility (larger than 26 of the last 26 comparable period changes, z=15.16)."
+      },
+      {
+        "name": "Seasonality & Cycles",
+        "category": "seasonality",
+        "status": "pass",
+        "score": 100,
+        "description": "Movement is not explained by routine weekday or seasonal cycles."
+      },
+      {
+        "name": "Data Quality Anomalies",
+        "category": "data_quality",
+        "status": "warning",
+        "score": 60,
+        "description": "Segment 'consoles_games' appeared from 0 to 6584.64 in current period.; Segment 'electronics' appeared from 0 to 4178.85 in current period."
+      }
+    ]
   },
   {
     "name": "(b1) Ordinary Week 1 (March 2017)",
@@ -61,7 +101,47 @@
         "share": "35.4%"
       }
     ],
-    "offsetting_effects": true
+    "offsetting_effects": true,
+    "timing_summary": "Change was distributed relatively evenly across 7 periods",
+    "dimension_shares": {
+      "category": 1.0,
+      "state": 1.0
+    },
+    "ruled_out_dimensions": [],
+    "next_inquiries": [
+      "Did marketing promotions, pricing updates, or inventory shifts occur for 'watches_gifts' in category?",
+      "Were tracking instruments or schema migrations deployed around 2017-03-13?"
+    ],
+    "confidence_breakdown": [
+      {
+        "name": "Reporting Completeness",
+        "category": "completeness",
+        "status": "pass",
+        "score": 100,
+        "description": "Current period data is complete with no reporting lag detected."
+      },
+      {
+        "name": "Volatility & Noise",
+        "category": "volatility",
+        "status": "warning",
+        "score": 40,
+        "description": "Delta is within normal historical volatility (larger than 11 of the last 16 comparable period changes, z=1.15)."
+      },
+      {
+        "name": "Seasonality & Cycles",
+        "category": "seasonality",
+        "status": "pass",
+        "score": 100,
+        "description": "Movement is not explained by routine weekday or seasonal cycles."
+      },
+      {
+        "name": "Data Quality Anomalies",
+        "category": "data_quality",
+        "status": "fail",
+        "score": 20,
+        "description": "Segment 'telephony' dropped to 0 from baseline of 1219.25 (possible tracking or pipeline break)."
+      }
+    ]
   },
   {
     "name": "(b2) Ordinary Week 2 (May 2017)",
@@ -93,7 +173,47 @@
         "share": "51.9%"
       }
     ],
-    "offsetting_effects": true
+    "offsetting_effects": true,
+    "timing_summary": "Change was distributed relatively evenly across 7 periods",
+    "dimension_shares": {
+      "category": 1.0,
+      "state": 1.0
+    },
+    "ruled_out_dimensions": [],
+    "next_inquiries": [
+      "Did marketing promotions, pricing updates, or inventory shifts occur for 'SP' in state?",
+      "Were tracking instruments or schema migrations deployed around 2017-05-15?"
+    ],
+    "confidence_breakdown": [
+      {
+        "name": "Reporting Completeness",
+        "category": "completeness",
+        "status": "pass",
+        "score": 100,
+        "description": "Current period data is complete with no reporting lag detected."
+      },
+      {
+        "name": "Volatility & Noise",
+        "category": "volatility",
+        "status": "warning",
+        "score": 40,
+        "description": "Delta is within normal historical volatility (larger than 11 of the last 25 comparable period changes, z=0.39)."
+      },
+      {
+        "name": "Seasonality & Cycles",
+        "category": "seasonality",
+        "status": "pass",
+        "score": 100,
+        "description": "Movement is not explained by routine weekday or seasonal cycles."
+      },
+      {
+        "name": "Data Quality Anomalies",
+        "category": "data_quality",
+        "status": "warning",
+        "score": 60,
+        "description": "Segment 'fashion_bags_accessories' appeared from 0 to 2138.94 in current period."
+      }
+    ]
   },
   {
     "name": "(b3) Ordinary Week 3 (July 2017)",
@@ -125,7 +245,47 @@
         "share": "37.5%"
       }
     ],
-    "offsetting_effects": true
+    "offsetting_effects": true,
+    "timing_summary": "Change was distributed relatively evenly across 7 periods",
+    "dimension_shares": {
+      "category": 1.0,
+      "state": 1.0
+    },
+    "ruled_out_dimensions": [],
+    "next_inquiries": [
+      "Did marketing promotions, pricing updates, or inventory shifts occur for 'RJ' in state?",
+      "Were tracking instruments or schema migrations deployed around 2017-07-17?"
+    ],
+    "confidence_breakdown": [
+      {
+        "name": "Reporting Completeness",
+        "category": "completeness",
+        "status": "pass",
+        "score": 100,
+        "description": "Current period data is complete with no reporting lag detected."
+      },
+      {
+        "name": "Volatility & Noise",
+        "category": "volatility",
+        "status": "warning",
+        "score": 40,
+        "description": "Delta is within normal historical volatility (larger than 12 of the last 26 comparable period changes, z=0.18)."
+      },
+      {
+        "name": "Seasonality & Cycles",
+        "category": "seasonality",
+        "status": "pass",
+        "score": 100,
+        "description": "Movement is not explained by routine weekday or seasonal cycles."
+      },
+      {
+        "name": "Data Quality Anomalies",
+        "category": "data_quality",
+        "status": "warning",
+        "score": 60,
+        "description": "Segment 'telephony' appeared from 0 to 3297.41 in current period."
+      }
+    ]
   },
   {
     "name": "(b4) Ordinary Week 4 (August 2017)",
@@ -157,7 +317,47 @@
         "share": "24.4%"
       }
     ],
-    "offsetting_effects": false
+    "offsetting_effects": false,
+    "timing_summary": "Change was distributed relatively evenly across 7 periods",
+    "dimension_shares": {
+      "category": 1.0,
+      "state": 1.0
+    },
+    "ruled_out_dimensions": [],
+    "next_inquiries": [
+      "Did marketing promotions, pricing updates, or inventory shifts occur for 'SP' in state?",
+      "Were tracking instruments or schema migrations deployed around 2017-08-21?"
+    ],
+    "confidence_breakdown": [
+      {
+        "name": "Reporting Completeness",
+        "category": "completeness",
+        "status": "pass",
+        "score": 100,
+        "description": "Current period data is complete with no reporting lag detected."
+      },
+      {
+        "name": "Volatility & Noise",
+        "category": "volatility",
+        "status": "pass",
+        "score": 100,
+        "description": "Delta is outside normal historical volatility (larger than 23 of the last 26 comparable period changes, z=2.51)."
+      },
+      {
+        "name": "Seasonality & Cycles",
+        "category": "seasonality",
+        "status": "pass",
+        "score": 100,
+        "description": "Movement is not explained by routine weekday or seasonal cycles."
+      },
+      {
+        "name": "Data Quality Anomalies",
+        "category": "data_quality",
+        "status": "pass",
+        "score": 100,
+        "description": "No zero drops, null spikes, or duplicate loads detected."
+      }
+    ]
   },
   {
     "name": "(b5) Ordinary Week 5 (October 2017)",
@@ -189,6 +389,46 @@
         "share": "51.6%"
       }
     ],
-    "offsetting_effects": true
+    "offsetting_effects": true,
+    "timing_summary": "Change was distributed relatively evenly across 7 periods",
+    "dimension_shares": {
+      "category": 1.0,
+      "state": 1.0
+    },
+    "ruled_out_dimensions": [],
+    "next_inquiries": [
+      "Did marketing promotions, pricing updates, or inventory shifts occur for 'SP' in state?",
+      "Were tracking instruments or schema migrations deployed around 2017-10-16?"
+    ],
+    "confidence_breakdown": [
+      {
+        "name": "Reporting Completeness",
+        "category": "completeness",
+        "status": "pass",
+        "score": 100,
+        "description": "Current period data is complete with no reporting lag detected."
+      },
+      {
+        "name": "Volatility & Noise",
+        "category": "volatility",
+        "status": "warning",
+        "score": 40,
+        "description": "Delta is within normal historical volatility (larger than 12 of the last 26 comparable period changes, z=0.23)."
+      },
+      {
+        "name": "Seasonality & Cycles",
+        "category": "seasonality",
+        "status": "pass",
+        "score": 100,
+        "description": "Movement is not explained by routine weekday or seasonal cycles."
+      },
+      {
+        "name": "Data Quality Anomalies",
+        "category": "data_quality",
+        "status": "pass",
+        "score": 100,
+        "description": "No zero drops, null spikes, or duplicate loads detected."
+      }
+    ]
   }
 ]

@@ -2,19 +2,18 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Database,
   Plus,
   Trash2,
 } from "lucide-react";
+import { CreateDashboardDialog } from "@/components/dashboard/CreateDashboardDialog";
 import { AppShell } from "@/components/shell/AppShell";
 import { Button } from "@/components/ui/button";
 import { api, ConnectionPublic, DashboardPublic } from "@/lib/api";
 
 export default function DashboardsPage() {
-  const router = useRouter();
   const [dashboards, setDashboards] = React.useState<DashboardPublic[]>([]);
   const [connections, setConnections] = React.useState<ConnectionPublic[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -23,9 +22,6 @@ export default function DashboardsPage() {
   // Create Dashboard Dialog
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
   const [selectedConnectionId, setSelectedConnectionId] = React.useState<string>("");
-  const [dashboardName, setDashboardName] = React.useState("");
-  const [isCreating, setIsCreating] = React.useState(false);
-  const [createError, setCreateError] = React.useState<string | null>(null);
 
   const loadData = React.useCallback(async () => {
     setLoading(true);
@@ -50,32 +46,6 @@ export default function DashboardsPage() {
   React.useEffect(() => {
     loadData();
   }, [loadData]);
-
-  const handleCreateDashboard = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedConnectionId) {
-      setCreateError("Please select a data connection.");
-      return;
-    }
-
-    setIsCreating(true);
-    setCreateError(null);
-    try {
-      const created = await api.createDashboard({
-        connection_id: selectedConnectionId,
-        name: dashboardName.trim() || undefined,
-      });
-      setIsCreateOpen(false);
-      setDashboardName("");
-      router.push(`/dashboards/${created.id}`);
-    } catch (err: unknown) {
-      setCreateError(
-        err instanceof Error ? err.message : "Failed to create dashboard"
-      );
-    } finally {
-      setIsCreating(false);
-    }
-  };
 
   const handleDeleteDashboard = async (id: string, name: string) => {
     if (!confirm(`Delete dashboard "${name}"?`)) return;
@@ -149,8 +119,8 @@ export default function DashboardsPage() {
               </Button>
             ) : (
               <Link href="/data">
-                <Button variant="primary" className="cursor-pointer">
-                  Connect a data source
+                <Button variant="primary" className="cursor-pointer" data-testid="btn-connect-warehouse">
+                  Connect your warehouse
                 </Button>
               </Link>
             )}
@@ -210,103 +180,12 @@ export default function DashboardsPage() {
         )}
 
         {/* Create Dashboard Dialog */}
-        {isCreateOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[1px] p-4">
-            <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-[6px] shadow-overlay max-w-md w-full p-6 flex flex-col gap-4">
-              <div className="flex items-center justify-between border-b border-[var(--border-hairline)] pb-3">
-                <h3 className="font-heading text-[17px] font-medium text-[var(--text-main)]">
-                  Create analytical dashboard
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setIsCreateOpen(false)}
-                  className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {createError && (
-                <div className="p-3 text-[12px] rounded-[4px] border border-[var(--trend-down)] bg-[var(--trend-down-subtle)] text-[var(--trend-down)]">
-                  {createError}
-                  {createError.includes("No confirmed semantic model") && (
-                    <div className="mt-2">
-                      <Link
-                        href="/data"
-                        className="font-medium underline hover:text-[var(--text-main)]"
-                      >
-                        Go to Data page to confirm default ecommerce set →
-                      </Link>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <form onSubmit={handleCreateDashboard} className="flex flex-col gap-4">
-                <div>
-                  <label className="block text-[12px] font-medium text-[var(--text-main)] mb-1">
-                    Dashboard name (optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={dashboardName}
-                    onChange={(e) => setDashboardName(e.target.value)}
-                    placeholder="e.g. Ecommerce Performance"
-                    className="w-full px-3 py-1.5 rounded-[4px] border border-[var(--border-hairline)] bg-[var(--bg-app)] text-[13px] text-[var(--text-main)] outline-none focus:border-[var(--accent)]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[12px] font-medium text-[var(--text-main)] mb-1">
-                    Select warehouse data source
-                  </label>
-                  {connections.length > 0 ? (
-                    <select
-                      value={selectedConnectionId}
-                      onChange={(e) => setSelectedConnectionId(e.target.value)}
-                      className="w-full px-3 py-1.5 rounded-[4px] border border-[var(--border-hairline)] bg-[var(--bg-app)] text-[13px] text-[var(--text-main)] outline-none focus:border-[var(--accent)] cursor-pointer"
-                    >
-                      {connections.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} ({c.warehouse_type})
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <p className="text-[12px] text-[var(--trend-down)]">
-                      No connections found. Please connect DuckDB or BigQuery first.
-                    </p>
-                  )}
-                  <p className="text-[11px] text-[var(--text-muted)] mt-1.5">
-                    Builds the 5 standard demo charts (revenue over time, revenue by category, orders by state, AOV, traffic source) dynamically on this warehouse source.
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border-hairline)]">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsCreateOpen(false)}
-                    className="cursor-pointer"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    size="sm"
-                    isLoading={isCreating}
-                    disabled={isCreating || connections.length === 0}
-                    className="cursor-pointer"
-                  >
-                    Build dashboard
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
+        <CreateDashboardDialog
+          open={isCreateOpen}
+          onOpenChange={setIsCreateOpen}
+          connections={connections}
+          defaultConnectionId={selectedConnectionId}
+        />
       </div>
     </AppShell>
   );

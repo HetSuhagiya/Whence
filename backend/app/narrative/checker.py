@@ -121,6 +121,50 @@ class NumberChecker:
                     if parsed is not None:
                         add_num(parsed)
 
+        # Explain Detail v2 fields
+        for share_val in (evidence.dimension_shares or {}).values():
+            add_num(share_val)
+
+        for dim_lifts in (evidence.segment_lift or {}).values():
+            for l_val in dim_lifts.values():
+                add_num(l_val)
+
+        for t_item in evidence.timing_strip or []:
+            add_num(t_item.get("current_value"))
+            add_num(t_item.get("baseline_value"))
+            add_num(t_item.get("delta"))
+            add_num(t_item.get("share_of_change"))
+
+        if evidence.timing_summary:
+            for m in re.finditer(general_num_pattern, evidence.timing_summary):
+                parsed = self.parse_numeric_token(m.group(1))
+                if parsed is not None:
+                    add_num(parsed)
+
+        for row in evidence.segment_comparison_table or []:
+            add_num(row.get("baseline_value"))
+            add_num(row.get("current_value"))
+            add_num(row.get("delta"))
+            add_num(row.get("percent_change"))
+            add_num(row.get("share_of_change"))
+            add_num(row.get("lift"))
+
+        if evidence.ratio_decomposition:
+            rd = evidence.ratio_decomposition
+            add_num(rd.get("volume_effect"))
+            add_num(rd.get("mix_effect"))
+            add_num(rd.get("rate_effect"))
+            add_num(rd.get("mix_share"))
+            add_num(rd.get("rate_share"))
+            if rd.get("plain_language"):
+                for m in re.finditer(general_num_pattern, str(rd["plain_language"])):
+                    parsed = self.parse_numeric_token(m.group(1))
+                    if parsed is not None:
+                        add_num(parsed)
+
+        for cb in evidence.confidence_breakdown or []:
+            add_num(cb.get("score"))
+
         # Standard descriptive counts commonly used (1, 2, 3, 4, 5, 100)
         for c in [1.0, 2.0, 3.0, 4.0, 5.0, 100.0]:
             numbers.add(c)
@@ -159,8 +203,8 @@ class NumberChecker:
         sanitized_text = re.sub(r"\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b", " DATE_TOKEN ", text)
 
         # Match numbers with optional $, %, k/m/b
-        # Use negative lookbehind so a hyphen right after letters/digits is not treated as minus
-        num_pattern = r"(?:\$|£|€)?\s*([+-]?\d+(?:,\d{3})*(?:\.\d+)?(?:\s*[kKmMbB%])?)"
+        # Use word boundary after suffix so '4500 between' is not treated as 4500 billion
+        num_pattern = r"(?:\$|£|€)?\s*([+-]?\d+(?:,\d{3})*(?:\.\d+)?(?:%|(?:\s*[kKmMbB]\b))?)"
         extracted_tokens = re.findall(num_pattern, sanitized_text)
 
         for raw_tok in extracted_tokens:
@@ -187,5 +231,41 @@ class NumberChecker:
                 errors.append(
                     f"Extracted figure '{raw_tok}' ({val}) does not match any number in Evidence."
                 )
+
+        # 3. Directional consistency check
+        pos_words = {"rose", "increased", "grew", "surged", "jumped", "higher"}
+        neg_words = {"fell", "decreased", "dropped", "declined", "plunged", "lower"}
+
+        sentences = [s.strip() for s in re.split(r"[.\n]", text) if s.strip()]
+        lead_sentence = sentences[0].lower() if sentences else text.lower()
+        lead_words = set(re.findall(r"\b[a-zA-Z]+\b", lead_sentence))
+        metric_word = evidence.metric_name.lower()
+
+        if evidence.delta < -1e-6:
+            if (lead_words & pos_words) and not (lead_words & neg_words):
+                errors.append(
+                    f"Directional mismatch: narrative claims {evidence.metric_name} rose/increased, but Evidence delta is negative ({evidence.delta})."
+                )
+            else:
+                for sent in sentences:
+                    sw = set(re.findall(r"\b[a-zA-Z]+\b", sent.lower()))
+                    if (metric_word in sent.lower() or "overall" in sent.lower() or "total" in sent.lower()) and (sw & pos_words) and not (sw & neg_words):
+                        errors.append(
+                            f"Directional mismatch: narrative claims {evidence.metric_name} rose/increased, but Evidence delta is negative ({evidence.delta})."
+                        )
+                        break
+        elif evidence.delta > 1e-6:
+            if (lead_words & neg_words) and not (lead_words & pos_words):
+                errors.append(
+                    f"Directional mismatch: narrative claims {evidence.metric_name} fell/decreased, but Evidence delta is positive ({evidence.delta})."
+                )
+            else:
+                for sent in sentences:
+                    sw = set(re.findall(r"\b[a-zA-Z]+\b", sent.lower()))
+                    if (metric_word in sent.lower() or "overall" in sent.lower() or "total" in sent.lower()) and (sw & neg_words) and not (sw & pos_words):
+                        errors.append(
+                            f"Directional mismatch: narrative claims {evidence.metric_name} fell/decreased, but Evidence delta is positive ({evidence.delta})."
+                        )
+                        break
 
         return (len(errors) == 0, errors)

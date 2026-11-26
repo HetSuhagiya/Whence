@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { Bar } from "react-chartjs-2";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -12,10 +11,15 @@ import {
   Loader2,
   X,
 } from "lucide-react";
-import { CHART_COLORS, formatMetricValue } from "./chartConfig";
-import type { ChartOptions, TooltipItem } from "chart.js";
+import { formatMetricValue } from "./chartConfig";
+import { DimensionSelectorWaterfall } from "./DimensionSelectorWaterfall";
+import { TimingDistributionStrip, type TimingStripItem } from "./TimingDistributionStrip";
+import { SegmentComparisonTable, type SegmentComparisonRow } from "./SegmentComparisonTable";
+import { RatioDecompositionPanel, type RatioDecompositionData } from "./RatioDecompositionPanel";
+import { ConfidenceScorecard, type ConfidenceCheckItem } from "./ConfidenceScorecard";
+import { NextInquiriesList } from "./NextInquiriesList";
 
-interface DriverFinding {
+export interface DriverFinding {
   id?: string;
   dimension: string;
   segment_value: string;
@@ -28,7 +32,7 @@ interface DriverFinding {
   sql?: string;
 }
 
-interface EvidenceIssue {
+export interface EvidenceIssue {
   description: string;
   id?: string;
   issue_type?: string;
@@ -36,18 +40,18 @@ interface EvidenceIssue {
   severity?: string;
 }
 
-interface EvidenceCheck {
+export interface EvidenceCheck {
   name: string;
   status: string;
   message?: string;
 }
 
-interface EvidenceWindow {
+export interface EvidenceWindow {
   start?: string;
   end?: string;
 }
 
-interface EvidencePayload {
+export interface EvidencePayload {
   confidence: "High" | "Medium" | "Low";
   confidence_reason: string;
   data_quality_issues?: EvidenceIssue[];
@@ -66,6 +70,18 @@ interface EvidencePayload {
   baseline_window?: EvidenceWindow;
   current_window?: EvidenceWindow;
   has_offsetting_effects?: boolean;
+  // Explain Detail v2 fields
+  dimension_waterfalls?: Record<string, DriverFinding[]>;
+  dimension_shares?: Record<string, number>;
+  segment_lift?: Record<string, Record<string, number>>;
+  lift_by_segment?: Record<string, Record<string, number>>;
+  timing_strip?: TimingStripItem[];
+  timing_summary?: string;
+  segment_comparison_table?: SegmentComparisonRow[];
+  ratio_decomposition?: RatioDecompositionData | null;
+  ruled_out_dimensions?: string[];
+  confidence_breakdown?: ConfidenceCheckItem[];
+  next_inquiries?: string[];
 }
 
 interface NarrativePayload {
@@ -121,6 +137,18 @@ export function ExplainDialog({
   const [isLoading, setIsLoading] = React.useState(!initialCompletedData);
   const [error, setError] = React.useState<string | null>(null);
   const [completedPayload, setCompletedPayload] = React.useState<ExplainCompletedPayload | null>(initialCompletedData || null);
+  const [isDark, setIsDark] = React.useState(false);
+
+  React.useEffect(() => {
+    if (typeof document !== "undefined") {
+      setIsDark(document.documentElement.classList.contains("dark"));
+      const observer = new MutationObserver(() => {
+        setIsDark(document.documentElement.classList.contains("dark"));
+      });
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
+      return () => observer.disconnect();
+    }
+  }, []);
   const [pipelineSteps, setPipelineSteps] = React.useState<StepProgress[]>([
     { step: 1, name: "resolve", title: "Resolve comparison windows", status: "pending" },
     { step: 2, name: "completeness", title: "Check reporting completeness & lag", status: "pending" },
@@ -244,56 +272,8 @@ export function ExplainDialog({
   const dqIssues = evidence?.data_quality_issues || [];
   const hasDataIssue = dqIssues.length > 0;
 
-  // Waterfall Chart Data
+  // Drivers list
   const driversList: DriverFinding[] = evidence?.drivers || [];
-  const waterfallLabels = driversList.map((d: DriverFinding) => String(d.segment_value));
-  const waterfallValues = driversList.map((d: DriverFinding) => Number(d.contribution_amount || 0));
-  const waterfallColors = waterfallValues.map((v: number) =>
-    v >= 0 ? CHART_COLORS.waterfallUp : CHART_COLORS.waterfallDown
-  );
-
-  const waterfallData = {
-    labels: waterfallLabels,
-    datasets: [
-      {
-        label: "Contribution",
-        data: waterfallValues,
-        backgroundColor: waterfallColors,
-        borderWidth: 0,
-        borderRadius: 2,
-      },
-    ],
-  };
-
-  const waterfallOptions: ChartOptions<"bar"> = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        callbacks: {
-          label: (ctx: TooltipItem<"bar">) => {
-            const d = driversList[ctx.dataIndex];
-            const share = d ? ` (${(d.share_of_change * 100).toFixed(1)}% of change)` : "";
-            return ` Contribution: ${formatMetricValue(Number(ctx.parsed.y || 0), "currency")}${share}`;
-          },
-        },
-      },
-    },
-    scales: {
-      x: {
-        grid: { display: false },
-        ticks: { color: CHART_COLORS.textMuted, font: { size: 11 } },
-      },
-      y: {
-        grid: { color: "rgba(205, 206, 214, 0.2)" },
-        ticks: {
-          color: CHART_COLORS.textMuted,
-          callback: (v: string | number) => formatMetricValue(Number(v), "currency"),
-        },
-      },
-    },
-  };
 
   // Copy narrative as text
   const handleCopyNarrative = () => {
@@ -499,71 +479,20 @@ export function ExplainDialog({
                 </div>
               </div>
 
-              {/* Driver Waterfall & Ranked List Side-by-Side (Only when drivers exist) */}
+              {/* Driver Waterfall / Dimension View */}
               {driversList.length > 0 && !hasDataIssue && confidence !== "Low" ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 p-4 rounded-[4px] border border-[var(--border-hairline)] bg-[var(--bg-surface)]">
-                  {/* Waterfall Chart */}
-                  <div className="flex flex-col">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[13px] font-medium text-[var(--text-main)]">
-                        Driver waterfall
-                      </span>
-                      <span className="text-[11px] text-[var(--text-muted)]">
-                        Floating bars (#59A14F / #E15759)
-                      </span>
-                    </div>
-                    <div className="h-[200px] w-full">
-                      <Bar data={waterfallData} options={waterfallOptions} />
-                    </div>
-                  </div>
-
-                  {/* Ranked List */}
-                  <div className="flex flex-col">
-                    <span className="text-[13px] font-medium text-[var(--text-main)] mb-2">
-                      Ranked driver contributions
-                    </span>
-                    <div className="flex flex-col divide-y divide-[var(--border-hairline)] overflow-y-auto max-h-[200px] text-[12px]">
-                      {driversList.map((d: DriverFinding, idx: number) => (
-                        <div
-                          key={d.id || idx}
-                          className="py-2 flex items-center justify-between hover:bg-[var(--bg-subtle)] px-2 rounded-[2px]"
-                        >
-                          <div>
-                            <span className="font-semibold text-[var(--text-main)]">
-                              {d.segment_value}
-                            </span>
-                            <span className="text-[11px] text-[var(--text-muted)] ml-2">
-                              in {d.dimension}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-3">
-                            <span
-                              className={`font-mono font-medium ${
-                                d.contribution_amount >= 0
-                                  ? "text-[var(--trend-up)]"
-                                  : "text-[var(--trend-down)]"
-                              }`}
-                            >
-                              {d.contribution_amount >= 0 ? "+" : ""}
-                              {formatMetricValue(d.contribution_amount, "currency")}
-                            </span>
-                            <span className="text-[11px] font-mono text-[var(--text-muted)] w-12 text-right">
-                              {(d.share_of_change * 100).toFixed(1)}%
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setDrilledSegment(d.segment_value)}
-                              className="text-[11px] text-[var(--accent-text)] hover:underline cursor-pointer"
-                            >
-                              Drill in
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                <DimensionSelectorWaterfall
+                  dimensionWaterfalls={
+                    evidence.dimension_waterfalls && Object.keys(evidence.dimension_waterfalls).length > 0
+                      ? evidence.dimension_waterfalls
+                      : { [driversList[0]?.dimension || "all"]: driversList }
+                  }
+                  dimensionShares={evidence.dimension_shares || {}}
+                  segmentLift={evidence.segment_lift || evidence.lift_by_segment || {}}
+                  ruledOutDimensions={evidence.ruled_out_dimensions || []}
+                  onDrillSegment={(seg) => setDrilledSegment(seg)}
+                  isDark={isDark}
+                />
               ) : (
                 /* Calm "no single cause stands out" notice */
                 <div
@@ -579,6 +508,22 @@ export function ExplainDialog({
                       "The movement is distributed broadly across monitored categories and within normal historical noise."}
                   </p>
                 </div>
+              )}
+
+              {/* Timing Distribution Strip (Day/period-level mini bar chart) */}
+              {evidence.timing_strip && evidence.timing_strip.length > 0 && (
+                <TimingDistributionStrip
+                  timingStrip={evidence.timing_strip}
+                  timingSummary={evidence.timing_summary || ""}
+                  isDark={isDark}
+                />
+              )}
+
+              {/* Ratio Decomposition (Volume / Mix / Rate split) */}
+              {evidence.ratio_decomposition && (
+                <RatioDecompositionPanel
+                  decomposition={evidence.ratio_decomposition}
+                />
               )}
 
               {/* Tabs: Summary, Evidence, Data checks */}
@@ -629,6 +574,11 @@ export function ExplainDialog({
                       ))}
                     </div>
 
+                    {/* Next Inquiries (Inquiry questions, never causes) */}
+                    {evidence.next_inquiries && evidence.next_inquiries.length > 0 && (
+                      <NextInquiriesList inquiries={evidence.next_inquiries} />
+                    )}
+
                     {narrative?.caveats && narrative.caveats.length > 0 && (
                       <div className="mt-2 p-3 bg-[var(--bg-app)] rounded-[4px] border border-[var(--border-hairline)] text-[12px] text-[var(--text-muted)] flex flex-col gap-1">
                         <span className="font-semibold text-[var(--text-main)]">Caveats & observations:</span>
@@ -673,6 +623,11 @@ export function ExplainDialog({
                       </div>
                     </div>
 
+                    {/* Segment Comparison Table (Baseline vs Current per segment) */}
+                    {evidence.segment_comparison_table && evidence.segment_comparison_table.length > 0 && (
+                      <SegmentComparisonTable rows={evidence.segment_comparison_table} />
+                    )}
+
                     {/* SQL per finding */}
                     {driversList.length > 0 && (
                       <div className="flex flex-col gap-2">
@@ -698,22 +653,33 @@ export function ExplainDialog({
 
                 {/* Tab 3: Data checks */}
                 {activeTab === "checks" && (
-                  <div className="flex flex-col gap-3 text-[12px]">
-                    <span className="font-medium text-[var(--text-main)]">Automated pipeline check outcomes:</span>
-                    <div className="flex flex-col divide-y divide-[var(--border-hairline)] border border-[var(--border-hairline)] rounded-[4px] overflow-hidden">
-                      {evidence.checks_run?.map((check: EvidenceCheck, idx: number) => (
-                        <div key={idx} className="p-2.5 flex items-center justify-between bg-[var(--bg-surface)]">
-                          <div className="flex items-center gap-2">
-                            {check.status === "pass" ? (
-                              <CheckCircle2 className="h-4 w-4 text-[var(--trend-up)]" />
-                            ) : (
-                              <AlertTriangle className="h-4 w-4 text-amber-500" />
-                            )}
-                            <span className="font-medium text-[var(--text-main)]">{check.name}</span>
+                  <div className="flex flex-col gap-4 text-[12px]">
+                    {/* Confidence Scorecard */}
+                    {evidence.confidence_breakdown && evidence.confidence_breakdown.length > 0 && (
+                      <ConfidenceScorecard
+                        breakdown={evidence.confidence_breakdown}
+                        overallConfidence={confidence}
+                        confidenceReason={evidence.confidence_reason}
+                      />
+                    )}
+
+                    <div className="flex flex-col gap-2">
+                      <span className="font-medium text-[var(--text-main)]">Automated pipeline check outcomes:</span>
+                      <div className="flex flex-col divide-y divide-[var(--border-hairline)] border border-[var(--border-hairline)] rounded-[4px] overflow-hidden">
+                        {evidence.checks_run?.map((check: EvidenceCheck, idx: number) => (
+                          <div key={idx} className="p-2.5 flex items-center justify-between bg-[var(--bg-surface)]">
+                            <div className="flex items-center gap-2">
+                              {check.status === "pass" ? (
+                                <CheckCircle2 className="h-4 w-4 text-[var(--trend-up)]" />
+                              ) : (
+                                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                              )}
+                              <span className="font-medium text-[var(--text-main)]">{check.name}</span>
+                            </div>
+                            <span className="text-[11px] text-[var(--text-muted)] font-mono">{check.message}</span>
                           </div>
-                          <span className="text-[11px] text-[var(--text-muted)] font-mono">{check.message}</span>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}

@@ -105,7 +105,16 @@ async def run_olist_eval():
     # Check for active BigQuery connection
     from app.connections.service import connection_service
     active_conns = connection_service.list_connections()
-    bq_conn = next((c for c in active_conns if c.warehouse_type == "bigquery"), None)
+    bq_conn = None
+    adapter = None
+    for c in active_conns:
+        if c.warehouse_type == "bigquery":
+            try:
+                adapter = semantic_service.get_adapter_for_connection(c.id)
+                bq_conn = c
+                break
+            except Exception:
+                continue
 
     runs_to_execute = [
         {
@@ -144,6 +153,8 @@ async def run_olist_eval():
 
     if bq_conn:
         adapter = semantic_service.get_adapter_for_connection(bq_conn.id)
+        if bq_conn.project_id == "primeval-pixel-407210":
+            adapter.location = "europe-west2"
         engine = ExplainEngine()
         all_summaries = []
 
@@ -208,11 +219,20 @@ async def run_olist_eval():
                 "confidence_reason": ev.confidence_reason,
                 "top_drivers": top_drivers_summary,
                 "offsetting_effects": ev.has_offsetting_effects,
+                "timing_summary": ev.timing_summary,
+                "dimension_shares": ev.dimension_shares,
+                "ruled_out_dimensions": ev.ruled_out_dimensions,
+                "next_inquiries": ev.next_inquiries,
+                "confidence_breakdown": ev.confidence_breakdown,
             }
             all_summaries.append(summary)
 
             print(f"  Revenue: ${b_data['revenue']:,.2f} -> ${c_data['revenue']:,.2f} ({ev.percent_change:+.1f}%)")
             print(f"  Confidence: {ev.confidence} ({ev.confidence_reason})")
+            print(f"  Timing Summary: {ev.timing_summary}")
+            print(f"  Dimension Shares: {ev.dimension_shares}")
+            print(f"  Ruled Out Dimensions: {ev.ruled_out_dimensions}")
+            print(f"  Next Inquiries: {ev.next_inquiries[:2]}")
             print(f"  Top Drivers: {top_drivers_summary}")
 
         out_file.parent.mkdir(parents=True, exist_ok=True)

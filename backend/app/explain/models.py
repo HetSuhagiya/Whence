@@ -106,3 +106,15 @@ class Evidence(BaseModel):
     confidence_reason: str
     is_complete: bool = True
     warning_messages: list[str] = Field(default_factory=list)
+    # Explain Detail v2 fields
+    dimension_waterfalls: dict[str, list[DriverContribution]] = Field(default_factory=dict)
+    dimension_shares: dict[str, float] = Field(default_factory=dict)
+    segment_lift: dict[str, dict[str, float]] = Field(default_factory=dict)
+    lift_by_segment: dict[str, dict[str, float]] = Field(default_factory=dict)
+    timing_strip: list[dict[str, Any]] = Field(default_factory=list)
+    timing_summary: str = ""
+    segment_comparison_table: list[dict[str, Any]] = Field(default_factory=list)
+    ratio_decomposition: dict[str, Any] | None = None
+    ruled_out_dimensions: list[str] = Field(default_factory=list)
+    confidence_breakdown: list[dict[str, Any]] = Field(default_factory=list)
+    next_inquiries: list[str] = Field(default_factory=list)

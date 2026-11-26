@@ -45,3 +45,7 @@ For every Medium or Large change, check SQL injection and the table allowlist, c
 ## Traceability and reporting
 
 Spec criteria lead to tickets, tickets to tests, and tests to PROGRESS.md. Each phase report lists any criterion without a test. Use the section 19 template for every ticket and phase report, and add the ADRs written, the risks still open and any deviations from the spec.
+
+## Product-first mode (current)
+
+Until the main flow works end to end, every ticket must end in something I can click in the UI. Do not start backend-only tickets unless a visible ticket needs them. Use one approval gate for the spec, design and tickets together, and keep the spec to one page. Verification stays: tests for logic, one end-to-end test of the happy path (connect, choose tables, confirm the model, create a dashboard, click a point, read the explanation) and light and dark screenshots. Run the eval harness only when engine code changes. Deferred until I say so: new eval scenarios, extra injection tests, calibration write-ups, and the Known gaps list except lift and timing, which the richer explanation needs.

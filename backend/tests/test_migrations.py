@@ -41,6 +41,18 @@ def test_alembic_migrations_up_and_down() -> None:
     }
     assert expected_tables.issubset(tables)
 
+    # Verify user tables are dropped
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(metrics);")
+    metric_cols = {row[1] for row in cur.fetchall()}
+    assert "guided_config" in metric_cols
+
+    cur.execute("PRAGMA table_info(dimensions);")
+    dim_cols = {row[1] for row in cur.fetchall()}
+    assert "is_custom" in dim_cols
+    assert "expression" in dim_cols
+
     # Downgrade to base
     command.downgrade(alembic_cfg, "base")
 

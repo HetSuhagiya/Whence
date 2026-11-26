@@ -219,6 +219,11 @@ describe("SemanticLayerManager Component", () => {
       expect(screen.getByTestId("metric-name-input")).toBeInTheDocument();
     });
 
+    const toggleAdv = screen.queryByTestId("toggle-advanced-mode");
+    if (toggleAdv) {
+      fireEvent.click(toggleAdv);
+    }
+
     fireEvent.change(screen.getByTestId("metric-numerator-input"), {
       target: { value: "SUM(sale_price)" },
     });

@@ -134,10 +134,30 @@ class ConnectionService:
             from app.adapters.bigquery_adapter import BigQueryAdapter
 
             client = self._get_bq_client(connection_id, billing_project=conn.billing_project)
+            location = conn.location
+            if location == "US" or not location:
+                sources = self.get_sources(connection_id)
+                if sources:
+                    try:
+                        first_s = sources[0]
+                        table_ref = client.get_table(
+                            f"{first_s.project_id}.{first_s.dataset_id}.{first_s.table_name}"
+                        )
+                        loc = getattr(table_ref, "location", None)
+                        if isinstance(loc, str) and loc:
+                            location = loc
+                            db = self._get_db()
+                            db.execute(
+                                "UPDATE connections SET location = ? WHERE id = ?",
+                                (location, connection_id),
+                            )
+                            db.commit()
+                    except Exception:
+                        pass
             return BigQueryAdapter(
                 project_id=conn.project_id or "",
                 dataset_id="thelook_ecommerce",
-                location=conn.location,
+                location=location,
                 client=client,
             )
 
@@ -236,16 +256,41 @@ class ConnectionService:
             raise KeyError(f"Connection '{conn_id}' not found.")
         db.commit()
 
-    def save_sources(self, conn_id: str, tables: list[TableDetail]) -> list[TableDetail]:
+    def save_sources(
+        self, conn_id: str, tables: list[TableDetail], client_override: Any = None
+    ) -> list[TableDetail]:
         now = time.time()
+        conn_pub = self.get_connection(conn_id)
         db = self._get_db()
         cur = db.cursor()
 
-        # Update connections table with JSON list
+        detected_location = conn_pub.location or "US"
+        if conn_pub.warehouse_type == "bigquery" and tables:
+            first_t = tables[0]
+            try:
+                client = client_override or self._get_bq_client(
+                    conn_id, billing_project=conn_pub.billing_project
+                )
+                try:
+                    table_ref = client.get_table(
+                        f"{first_t.project_id}.{first_t.dataset_id}.{first_t.table_name}"
+                    )
+                    loc = getattr(table_ref, "location", None)
+                    if isinstance(loc, str) and loc:
+                        detected_location = loc
+                except Exception:
+                    ds_ref = client.get_dataset(f"{first_t.project_id}.{first_t.dataset_id}")
+                    loc = getattr(ds_ref, "location", None)
+                    if isinstance(loc, str) and loc:
+                        detected_location = loc
+            except Exception:
+                pass
+
+        # Update connections table with JSON list and detected location
         tables_json = json.dumps([t.model_dump() for t in tables])
         cur.execute(
-            "UPDATE connections SET selected_tables = ?, updated_at = ? WHERE id = ?",
-            (tables_json, now, conn_id),
+            "UPDATE connections SET selected_tables = ?, location = ?, updated_at = ? WHERE id = ?",
+            (tables_json, detected_location, now, conn_id),
         )
         if cur.rowcount == 0:
             raise KeyError(f"Connection '{conn_id}' not found.")
@@ -329,10 +374,19 @@ class ConnectionService:
         client = self._get_bq_client(conn_id, billing_project=conn_pub.billing_project)
         try:
             datasets = list(client.list_datasets(project=project_id))
-            return [
-                {"dataset_id": d.dataset_id, "location": getattr(d, "location", "US") or "US"}
-                for d in datasets
-            ]
+            result: list[dict[str, str]] = []
+            for d in datasets:
+                loc = getattr(d, "location", None)
+                if not loc:
+                    try:
+                        ref = getattr(d, "reference", None)
+                        if ref:
+                            ds_full = client.get_dataset(ref)
+                            loc = getattr(ds_full, "location", None)
+                    except Exception:
+                        pass
+                result.append({"dataset_id": d.dataset_id, "location": loc or "US"})
+            return result
         except Exception as e:
             friendly, _ = map_bigquery_error(
                 e, project_id=project_id, client_email=conn_pub.client_email
@@ -688,11 +742,21 @@ class ConnectionService:
             )
 
         # Check (d): Datasets can be listed
-        detected_location = "US"
+        detected_location = conn_pub.location or "US"
         try:
             datasets = list(client.list_datasets(project=conn_pub.project_id, max_results=10))
             if datasets:
-                detected_location = getattr(datasets[0], "location", "US") or "US"
+                loc = getattr(datasets[0], "location", None)
+                if not loc:
+                    try:
+                        ref = getattr(datasets[0], "reference", None)
+                        if ref:
+                            ds_full = client.get_dataset(ref)
+                            loc = getattr(ds_full, "location", None)
+                    except Exception:
+                        pass
+                if loc:
+                    detected_location = loc
             checks.append(
                 CheckItem(
                     id="list_datasets",
@@ -723,6 +787,9 @@ class ConnectionService:
                 table_ref = client.get_table(
                     f"{first_t.project_id}.{first_t.dataset_id}.{first_t.table_name}"
                 )
+                loc = getattr(table_ref, "location", None)
+                if isinstance(loc, str) and loc:
+                    detected_location = loc
                 cols_count = len(table_ref.schema)
                 checks.append(
                     CheckItem(
@@ -761,6 +828,14 @@ class ConnectionService:
             )
 
         # Check (f): Detect location
+        db = self._get_db()
+        cur = db.cursor()
+        cur.execute(
+            "UPDATE connections SET location = ?, updated_at = ? WHERE id = ?",
+            (str(detected_location), time.time(), conn_id),
+        )
+        db.commit()
+
         checks.append(
             CheckItem(
                 id="detect_location",
@@ -781,7 +856,7 @@ class ConnectionService:
             job_config = bigquery.QueryJobConfig(
                 dry_run=True, use_query_cache=False, labels={"app": "whence"}
             )
-            test_job = client.query(test_sql, job_config=job_config)
+            test_job = client.query(test_sql, job_config=job_config, location=detected_location)
             bytes_scanned = test_job.total_bytes_processed or 0
             formatted = format_table_size(bytes_scanned)
             cap_formatted = format_table_size(settings.MAX_BYTES_SCANNED_PER_QUERY)

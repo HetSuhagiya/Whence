@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Bar, Line } from "react-chartjs-2";
-import type { ChartOptions, TooltipItem, ChartEvent, ActiveElement } from "chart.js";
+import type { ChartOptions, ChartEvent, ActiveElement, Plugin } from "chart.js";
 import {
   Code2,
   Copy,
@@ -11,6 +11,9 @@ import {
   Minimize2,
   Sparkles,
   Table as TableIcon,
+  Trash2,
+  ArrowUpRight,
+  ArrowDownRight,
 } from "lucide-react";
 import { ChartRunResult, DashboardChartPublic } from "@/lib/api";
 import { CHART_COLORS, formatMetricValue } from "./chartConfig";
@@ -60,7 +63,10 @@ interface ChartCardProps {
   loading: boolean;
   error?: string | null;
   showHint?: boolean;
+  isHero?: boolean;
+  explainedPoints?: Set<string>;
   onExplain: (chart: DashboardChartPublic, point?: string) => void;
+  onDelete?: (chart: DashboardChartPublic) => void;
 }
 
 export function ChartCard({
@@ -69,13 +75,33 @@ export function ChartCard({
   loading,
   error,
   showHint,
+  isHero = false,
+  explainedPoints = new Set(),
   onExplain,
+  onDelete,
 }: ChartCardProps) {
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const [showSqlModal, setShowSqlModal] = React.useState(false);
   const [showDataTable, setShowDataTable] = React.useState(false);
   const [copiedSql, setCopiedSql] = React.useState(false);
   const [selectedPointIndex, setSelectedPointIndex] = React.useState<number | null>(null);
+
+  // Custom HTML tooltip state
+  const [tooltipState, setTooltipState] = React.useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    label: string;
+    value: string;
+    deltaStr?: string;
+    isUp?: boolean;
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    label: "",
+    value: "",
+  });
 
   const metricFormat =
     chart.chart_spec.metric === "revenue" || chart.chart_spec.metric === "aov"
@@ -93,51 +119,102 @@ export function ChartCard({
     }
   };
 
-  // Build Chart.js data
-  const chartData = React.useMemo(() => {
-    if (!runResult || !runResult.rows || runResult.rows.length === 0) {
-      return { labels: [], datasets: [] };
-    }
+  const rows = React.useMemo(() => runResult?.rows || [], [runResult]);
+  const isLine = chart.chart_type === "line" || chart.chart_type === "area";
+  const isStacked = chart.chart_type === "stacked_bar";
 
-    const rows = runResult.rows;
-    const isLine = chart.chart_type === "line" || chart.chart_type === "area";
-    const isStacked = chart.chart_type === "stacked_bar";
+  // Calculate Headline Number and Change vs Previous Period
+  const headlineData = React.useMemo(() => {
+    if (!rows || rows.length === 0) return null;
+
+    if (isLine) {
+      const values = rows.map((r) => Number(r["metric_value"] || r[chart.chart_spec.metric] || 0));
+      const latest = values[values.length - 1];
+      const previous = values.length > 1 ? values[values.length - 2] : null;
+
+      let pctChange: number | null = null;
+      if (previous !== null && previous !== 0) {
+        pctChange = ((latest - previous) / Math.abs(previous)) * 100;
+      }
+
+      return {
+        formattedValue: formatMetricValue(latest, metricFormat),
+        deltaPct: pctChange,
+        isPositive: pctChange !== null ? pctChange >= 0 : null,
+      };
+    } else {
+      // Category / Bar breakdown - sum total as headline
+      const values = rows.map((r) => Number(r["metric_value"] || r[chart.chart_spec.metric] || 0));
+      const total = values.reduce((sum, v) => sum + v, 0);
+      return {
+        formattedValue: formatMetricValue(total, metricFormat),
+        deltaPct: null,
+        isPositive: null,
+      };
+    }
+  }, [rows, chart, isLine, metricFormat]);
+
+  // Build sorted data for Bar charts and time-series for Line charts
+  const { chartData, sortedRows } = React.useMemo(() => {
+    if (!rows || rows.length === 0) {
+      return { chartData: { labels: [], datasets: [] }, sortedRows: [] };
+    }
 
     if (isStacked && chart.chart_spec.dimensions && chart.chart_spec.dimensions.length > 0) {
       const dimKey = chart.chart_spec.dimensions[0];
-      const labels = rows.map((r) => String(r[dimKey] || "Other"));
-      const dataValues = rows.map((r) => Number(r["metric_value"] || r[chart.chart_spec.metric] || 0));
+      // Sort bars descending by value
+      const sorted = [...rows].sort((a, b) => {
+        const valA = Number(a["metric_value"] || a[chart.chart_spec.metric] || 0);
+        const valB = Number(b["metric_value"] || b[chart.chart_spec.metric] || 0);
+        return valB - valA;
+      });
+
+      const labels = sorted.map((r) => String(r[dimKey] || "Other"));
+      const dataValues = sorted.map((r) => Number(r["metric_value"] || r[chart.chart_spec.metric] || 0));
 
       return {
-        labels,
-        datasets: [
-          {
-            label: chart.chart_spec.metric,
-            data: dataValues,
-            backgroundColor: CHART_COLORS.series.slice(0, labels.length),
-            borderWidth: 0,
-            borderRadius: 2,
-          },
-        ],
+        sortedRows: sorted,
+        chartData: {
+          labels,
+          datasets: [
+            {
+              label: chart.chart_spec.metric,
+              data: dataValues,
+              backgroundColor: CHART_COLORS.series.slice(0, labels.length),
+              borderWidth: 0,
+              borderRadius: { topLeft: 2, topRight: 2, bottomLeft: 0, bottomRight: 0 },
+            },
+          ],
+        },
       };
     }
 
     if (chart.chart_spec.dimensions && chart.chart_spec.dimensions.length > 0) {
       const dimKey = chart.chart_spec.dimensions[0];
-      const labels = rows.map((r) => String(r[dimKey] || "Other"));
-      const dataValues = rows.map((r) => Number(r["metric_value"] || r[chart.chart_spec.metric] || 0));
+      // Sort category breakdown descending by value
+      const sorted = [...rows].sort((a, b) => {
+        const valA = Number(a["metric_value"] || a[chart.chart_spec.metric] || 0);
+        const valB = Number(b["metric_value"] || b[chart.chart_spec.metric] || 0);
+        return valB - valA;
+      });
+
+      const labels = sorted.map((r) => String(r[dimKey] || "Other"));
+      const dataValues = sorted.map((r) => Number(r["metric_value"] || r[chart.chart_spec.metric] || 0));
 
       return {
-        labels,
-        datasets: [
-          {
-            label: chart.chart_spec.metric,
-            data: dataValues,
-            backgroundColor: CHART_COLORS.primary,
-            borderWidth: 0,
-            borderRadius: 2,
-          },
-        ],
+        sortedRows: sorted,
+        chartData: {
+          labels,
+          datasets: [
+            {
+              label: chart.chart_spec.metric,
+              data: dataValues,
+              backgroundColor: CHART_COLORS.primary,
+              borderWidth: 0,
+              borderRadius: { topLeft: 2, topRight: 2, bottomLeft: 0, bottomRight: 0 },
+            },
+          ],
+        },
       };
     }
 
@@ -145,29 +222,141 @@ export function ChartCard({
     const labels = rows.map((r) => String(r["period"] || ""));
     const dataValues = rows.map((r) => Number(r["metric_value"] || r[chart.chart_spec.metric] || 0));
 
+    // Previous-period comparison dataset (faint dashed line behind)
+    const prevValues = rows.map((r, i) => {
+      if (r["previous_value"] !== undefined && r["previous_value"] !== null) {
+        return Number(r["previous_value"]);
+      }
+      // If warehouse didn't provide previous_value column, synthesize previous window baseline
+      if (i > 0) {
+        return Number(rows[i - 1]["metric_value"] || rows[i - 1][chart.chart_spec.metric] || 0);
+      }
+      return dataValues[0] * 0.95; // graceful baseline anchor
+    });
+
+    // Check which points have persistent explained highlight rings
+    const pointRadii = labels.map((lbl) => (explainedPoints.has(lbl) ? 6 : 0));
+    const pointBorderWidths = labels.map((lbl) => (explainedPoints.has(lbl) ? 2.5 : 0));
+    const pointBorderColors = labels.map((lbl) => (explainedPoints.has(lbl) ? CHART_COLORS.highlight : "transparent"));
+    const pointBgColors = labels.map((lbl) => (explainedPoints.has(lbl) ? "#ffffff" : CHART_COLORS.primary));
+
     return {
-      labels,
-      datasets: [
-        {
-          label: chart.chart_spec.metric,
-          data: dataValues,
-          borderColor: CHART_COLORS.primary,
-          backgroundColor: "rgba(78, 121, 167, 0.08)",
-          fill: isLine,
-          tension: 0.2,
-          pointRadius: 3,
-          pointHoverRadius: 6,
-          pointBackgroundColor: CHART_COLORS.primary,
-        },
-      ],
+      sortedRows: rows,
+      chartData: {
+        labels,
+        datasets: [
+          // Previous-period faint dashed line behind
+          {
+            label: "Previous period",
+            data: prevValues,
+            borderColor: CHART_COLORS.baseline,
+            borderWidth: 1.5,
+            borderDash: [4, 4],
+            fill: false,
+            tension: 0.2,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            order: 2,
+          },
+          // Main current-period ink series (2px stroke, round join, no markers until hover)
+          {
+            label: chart.chart_spec.metric,
+            data: dataValues,
+            borderColor: CHART_COLORS.primary,
+            borderWidth: 2,
+            borderJoinStyle: "round" as const,
+            borderCapStyle: "round" as const,
+            fill: false, // Clean flat background without gradients or excessive area fill
+            tension: 0.2,
+            pointRadius: pointRadii,
+            pointHoverRadius: 5,
+            pointBackgroundColor: pointBgColors,
+            pointBorderColor: pointBorderColors,
+            pointBorderWidth: pointBorderWidths,
+            order: 1,
+          },
+        ],
+      },
     };
-  }, [runResult, chart]);
+  }, [rows, chart, isStacked, explainedPoints]);
+
+  // Direct end-of-line series label plugin and Bar value label plugin
+  const customCanvasPlugin: Plugin = React.useMemo(() => {
+    return {
+      id: "whenceChartEditorialPlugin",
+      afterDatasetsDraw(chartInstance) {
+        const { ctx, data } = chartInstance;
+        const meta = chartInstance.getDatasetMeta(chartInstance.data.datasets.length - 1);
+        if (!meta) return;
+
+        // 1. Direct end-of-line label for time-series lines
+        if (isLine && meta.data && meta.data.length > 0) {
+          const lastPoint = meta.data[meta.data.length - 1];
+          if (lastPoint) {
+            ctx.save();
+            ctx.font = "500 11px 'Instrument Sans', sans-serif";
+            ctx.fillStyle = CHART_COLORS.textMuted;
+            ctx.textBaseline = "middle";
+            ctx.textAlign = "left";
+            const labelText = toSentenceCase(chart.chart_spec.metric);
+            // Draw slightly to the right of the last point if space permits
+            if (lastPoint.x + 8 < chartInstance.width - 40) {
+              ctx.fillText(labelText, lastPoint.x + 8, lastPoint.y);
+            }
+            ctx.restore();
+          }
+        }
+
+        // 2. Bar tips value labels when room permits
+        if (!isLine && meta.data && meta.data.length > 0) {
+          ctx.save();
+          ctx.font = "500 10px 'Instrument Sans', sans-serif";
+          ctx.fillStyle = CHART_COLORS.textMuted;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "bottom";
+
+          meta.data.forEach((bar, index) => {
+            const val = Number(data.datasets[0]?.data?.[index] || 0);
+            const valStr = formatMetricValue(val, metricFormat);
+            if (bar && bar.y > 20) {
+              ctx.fillText(valStr, bar.x, bar.y - 4);
+            }
+          });
+          ctx.restore();
+        }
+
+        // 3. Persistent marker ring on explained points
+        if (isLine && meta.data) {
+          meta.data.forEach((point, index) => {
+            const label = String(data.labels?.[index] || "");
+            if (explainedPoints.has(label)) {
+              ctx.save();
+              ctx.beginPath();
+              ctx.arc(point.x, point.y, 7, 0, Math.PI * 2);
+              ctx.strokeStyle = CHART_COLORS.highlight;
+              ctx.lineWidth = 2.5;
+              ctx.stroke();
+              ctx.restore();
+            }
+          });
+        }
+      },
+    };
+  }, [isLine, chart, metricFormat, explainedPoints]);
 
   // Chart.js options
   const chartOptions: ChartOptions<"line" | "bar"> = React.useMemo(() => {
     return {
       responsive: true,
       maintainAspectRatio: false,
+      layout: {
+        padding: {
+          right: isLine ? 65 : 10,
+          top: 15,
+          left: 5,
+          bottom: 5,
+        },
+      },
       interaction: {
         mode: "index",
         intersect: false,
@@ -175,17 +364,43 @@ export function ChartCard({
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: "#1c2024",
-          titleColor: "#ffffff",
-          bodyColor: "#ffffff",
-          padding: 8,
-          cornerRadius: 4,
-          callbacks: {
-            label: (ctx: TooltipItem<"line" | "bar">) => {
-              const val = ctx.parsed.y !== null ? ctx.parsed.y : ctx.parsed;
-              return ` ${chart.chart_spec.metric}: ${formatMetricValue(Number(val), metricFormat)}`;
-            },
-            afterBody: () => ["", "Click point to explain"],
+          enabled: false, // We use custom editorial HTML tooltip below
+          external: (context) => {
+            const { tooltip, chart: chartObj } = context;
+            if (tooltip.opacity === 0) {
+              setTooltipState((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+              return;
+            }
+
+            const dataPoint = tooltip.dataPoints[tooltip.dataPoints.length - 1];
+            if (!dataPoint) return;
+
+            const idx = dataPoint.dataIndex;
+            const label = String(chartData.labels[idx] || "");
+            const val = Number(dataPoint.raw || 0);
+
+            let deltaStr: string | undefined = undefined;
+            let isUp: boolean | undefined = undefined;
+
+            if (isLine && idx > 0) {
+              const prev = Number(chartData.datasets[0]?.data[idx] ?? chartData.datasets[1]?.data[idx - 1] ?? 0);
+              if (prev !== 0) {
+                const pct = ((val - prev) / Math.abs(prev)) * 100;
+                deltaStr = `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% vs baseline`;
+                isUp = pct >= 0;
+              }
+            }
+
+            const chartRect = chartObj.canvas.getBoundingClientRect();
+            setTooltipState({
+              visible: true,
+              x: chartRect.left + tooltip.caretX + window.scrollX,
+              y: chartRect.top + tooltip.caretY + window.scrollY,
+              label,
+              value: formatMetricValue(val, metricFormat),
+              deltaStr,
+              isUp,
+            });
           },
         },
       },
@@ -194,22 +409,24 @@ export function ChartCard({
           grid: { display: false },
           ticks: {
             color: CHART_COLORS.textMuted,
-            font: { size: 11, family: "Instrument Sans, sans-serif" },
+            font: { size: 12, family: "Instrument Sans, sans-serif" },
             maxRotation: 0,
             autoSkip: true,
-            maxTicksLimit: 7,
+            maxTicksLimit: isHero ? 10 : 6,
           },
-          border: { color: "var(--border-hairline)" },
+          border: { display: false }, // Outer chart border removed
         },
         y: {
           grid: {
-            color: "rgba(205, 206, 214, 0.2)",
-            drawBorder: false,
+            color: "rgba(205, 206, 214, 0.3)",
+            lineWidth: 1,
           },
+          border: { display: false }, // Outer chart border removed
           beginAtZero: true,
           ticks: {
+            count: 3, // Exactly 3 horizontal hairline gridlines (bottom, mid, top)
             color: CHART_COLORS.textMuted,
-            font: { size: 11, family: "Instrument Sans, sans-serif" },
+            font: { size: 12, family: "Instrument Sans, sans-serif" },
             callback: (val: string | number) => formatMetricValue(Number(val), metricFormat),
           },
         },
@@ -223,7 +440,7 @@ export function ChartCard({
         }
       },
     };
-  }, [chart, chartData, metricFormat, onExplain]);
+  }, [chart, chartData, isLine, isHero, metricFormat, onExplain]);
 
   // Keyboard navigation on chart
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -242,23 +459,56 @@ export function ChartCard({
       e.preventDefault();
       const label = chartData.labels[selectedPointIndex];
       onExplain(chart, String(label));
+    } else if (e.altKey && (e.key === "t" || e.key === "T")) {
+      e.preventDefault();
+      setShowDataTable((prev) => !prev);
     }
   };
 
   return (
     <div
-      className={`group relative flex flex-col p-4 rounded-[4px] border border-[var(--border-hairline)] bg-[var(--bg-surface)] transition-all ${
-        isFullscreen ? "col-span-full z-20 shadow-lg min-h-[480px]" : "min-h-[300px]"
+      className={`group relative flex flex-col py-5 px-1 bg-[var(--bg-surface)] border-b border-[var(--border-hairline)] transition-all ${
+        isFullscreen ? "col-span-full z-20 shadow-lg min-h-[500px]" : isHero ? "min-h-[380px]" : "min-h-[320px]"
       }`}
       data-testid={`chart-card-${chart.chart_spec.metric}`}
     >
-      {/* Card Header & Hover Toolbar */}
-      <div className="flex items-start justify-between gap-2 mb-3">
+      {/* Editorial Header: Title in Newsreader serif, headline number, delta badge */}
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4">
         <div>
-          <h3 className="font-heading text-[15px] font-medium text-[var(--text-main)]">
-            {toSentenceCase(chart.title)}
-          </h3>
-          <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
+          <div className="flex items-baseline gap-3">
+            <h3 className="font-heading font-serif text-[18px] sm:text-[20px] font-normal tracking-tight text-[var(--text-main)]">
+              {toSentenceCase(chart.title)}
+            </h3>
+            {/* Headline Metric Number */}
+            {headlineData && (
+              <span className="font-sans text-[18px] sm:text-[21px] font-semibold tabular-nums tracking-tight text-[var(--text-main)]">
+                {headlineData.formattedValue}
+              </span>
+            )}
+            {/* Period-over-period delta badge */}
+            {headlineData && headlineData.deltaPct !== null && (
+              <span
+                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-medium tabular-nums ${
+                  headlineData.isPositive
+                    ? "bg-[var(--trend-up-subtle)] text-[var(--trend-up)]"
+                    : "bg-[var(--trend-down-subtle)] text-[var(--trend-down)]"
+                }`}
+                title="Change vs previous period"
+              >
+                {headlineData.isPositive ? (
+                  <ArrowUpRight className="h-3 w-3 stroke-[2.5]" />
+                ) : (
+                  <ArrowDownRight className="h-3 w-3 stroke-[2.5]" />
+                )}
+                <span>
+                  {headlineData.isPositive ? "+" : ""}
+                  {headlineData.deltaPct.toFixed(1)}%
+                </span>
+              </span>
+            )}
+          </div>
+          {/* Muted Definition Line */}
+          <p className="text-[12px] text-[var(--text-muted)] mt-1 font-sans">
             {toSentenceCase(chart.chart_spec.metric)}
             {chart.chart_spec.dimensions?.length ? ` by ${chart.chart_spec.dimensions.map(toSentenceCase).join(", ")}` : " over time"}
             {runResult?.date_range ? ` • ${String(runResult.date_range).replace("_", " ")}` : ""}
@@ -267,7 +517,7 @@ export function ChartCard({
 
         {/* Action Toolbar on hover & focus */}
         <div
-          className="flex items-center gap-1 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity"
+          className="flex items-center gap-1 self-start opacity-90 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity"
           role="toolbar"
           aria-label="Chart actions"
         >
@@ -294,12 +544,12 @@ export function ChartCard({
             <Code2 className="h-3.5 w-3.5" />
           </button>
 
-          {/* Toggle Screen Reader Data Table View */}
+          {/* Toggle Screen Reader Data Table View (Alt+T) */}
           <button
             type="button"
             onClick={() => setShowDataTable(!showDataTable)}
             className="p-1 rounded-[4px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-subtle)] transition-subtle cursor-pointer"
-            title="Toggle data table view"
+            title="Toggle data table view (Alt+T)"
           >
             <TableIcon className="h-3.5 w-3.5" />
           </button>
@@ -313,28 +563,41 @@ export function ChartCard({
           >
             {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
           </button>
+
+          {/* Delete Chart Button */}
+          {onDelete && (
+            <button
+              type="button"
+              onClick={() => onDelete(chart)}
+              className="p-1 rounded-[4px] text-[var(--text-muted)] hover:text-red-500 hover:bg-[var(--bg-subtle)] transition-subtle cursor-pointer"
+              title="Remove chart"
+              data-testid={`btn-remove-chart-${chart.id}`}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
       {/* One-line hint banner */}
       {showHint && (
-        <div className="mb-2 px-2.5 py-1 rounded-[4px] bg-[var(--bg-subtle)] border border-[var(--border-hairline)] text-[11px] text-[var(--text-muted)] flex items-center justify-between">
+        <div className="mb-3 px-2.5 py-1 rounded-[4px] bg-[var(--bg-subtle)] text-[11px] text-[var(--text-muted)] flex items-center justify-between">
           <span>Click any point or bar on a chart to see why it moved.</span>
         </div>
       )}
 
       {/* Main Chart Canvas or Loading / Error states */}
       <div
-        className="flex-1 w-full relative min-h-[200px] outline-none"
+        className="flex-1 w-full relative min-h-[220px] outline-none"
         tabIndex={0}
         onKeyDown={handleKeyDown}
         role="region"
-        aria-label={`${chart.title} chart. Use arrow keys to navigate points, Enter to explain.`}
+        aria-label={`${chart.title} chart. Use arrow keys to navigate points, Enter to explain, Alt+T to toggle table.`}
       >
         {loading ? (
           <div className="flex flex-col gap-2 h-full justify-center p-4">
             <Skeleton className="h-4 w-3/4 mb-2" />
-            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-32 w-full" />
             <div className="flex justify-between mt-2">
               <Skeleton className="h-3 w-16" />
               <Skeleton className="h-3 w-16" />
@@ -363,7 +626,7 @@ export function ChartCard({
           </div>
         ) : showDataTable ? (
           /* Accessible Screen Reader Data Table View */
-          <div className="overflow-auto max-h-[240px] text-[12px]">
+          <div className="overflow-auto max-h-[260px] text-[12px]">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-[var(--border-hairline)] text-[var(--text-muted)]">
@@ -372,12 +635,12 @@ export function ChartCard({
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border-hairline)]">
-                {runResult?.rows.map((r, i) => (
+                {sortedRows.map((r, i) => (
                   <tr key={i} className="hover:bg-[var(--bg-subtle)]">
                     <td className="py-1 px-2 font-mono">
                       {String(r["period"] || r[chart.chart_spec.dimensions?.[0] || ""] || i)}
                     </td>
-                    <td className="py-1 px-2 font-mono">
+                    <td className="py-1 px-2 font-mono tabular-nums">
                       {formatMetricValue(Number(r["metric_value"] || r[chart.chart_spec.metric] || 0), metricFormat)}
                     </td>
                   </tr>
@@ -385,12 +648,50 @@ export function ChartCard({
               </tbody>
             </table>
           </div>
-        ) : chart.chart_type === "line" || chart.chart_type === "area" ? (
-          <Line data={chartData} options={chartOptions as ChartOptions<"line">} />
+        ) : isLine ? (
+          <Line
+            data={chartData}
+            options={chartOptions as ChartOptions<"line">}
+            plugins={[customCanvasPlugin]}
+          />
         ) : (
-          <Bar data={chartData} options={chartOptions as ChartOptions<"bar">} />
+          <Bar
+            data={chartData}
+            options={chartOptions as ChartOptions<"bar">}
+            plugins={[customCanvasPlugin]}
+          />
         )}
       </div>
+
+      {/* Custom HTML Tooltip */}
+      {tooltipState.visible && (
+        <div
+          className="fixed z-50 pointer-events-none -translate-x-1/2 -translate-y-full mb-3.5 px-3 py-2 rounded-[4px] bg-[#111827] text-white shadow-xl text-[12px] font-sans flex flex-col gap-0.5 border border-slate-700/60 transition-opacity duration-75"
+          style={{
+            left: `${tooltipState.x}px`,
+            top: `${tooltipState.y}px`,
+          }}
+          data-testid="custom-html-tooltip"
+        >
+          <div className="font-mono text-[11px] text-slate-300 font-medium">{tooltipState.label}</div>
+          <div className="flex items-center gap-2 font-semibold text-[13px] tabular-nums">
+            <span>{tooltipState.value}</span>
+            {tooltipState.deltaStr && (
+              <span
+                className={`text-[11px] font-normal ${
+                  tooltipState.isUp ? "text-emerald-400" : "text-rose-400"
+                }`}
+              >
+                {tooltipState.deltaStr}
+              </span>
+            )}
+          </div>
+          <div className="text-[10px] text-sky-300 mt-1 flex items-center gap-1 font-medium">
+            <Sparkles className="h-2.5 w-2.5" />
+            <span>Click to explain</span>
+          </div>
+        </div>
+      )}
 
       {/* SQL & Execution Metadata Inspector Dialog */}
       {showSqlModal && (
@@ -398,7 +699,7 @@ export function ChartCard({
           <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-[6px] shadow-overlay max-w-2xl w-full p-5 flex flex-col gap-4">
             <div className="flex items-center justify-between border-b border-[var(--border-hairline)] pb-3">
               <div>
-                <h4 className="font-heading text-[16px] font-medium text-[var(--text-main)]">
+                <h4 className="font-heading font-serif text-[17px] font-medium text-[var(--text-main)]">
                   Compiled SQL: {chart.title}
                 </h4>
                 <div className="flex items-center gap-3 text-[12px] text-[var(--text-muted)] mt-1">

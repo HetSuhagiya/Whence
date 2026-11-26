@@ -204,7 +204,7 @@ Forecast with backtest, Compare, Anomaly scan, events log (manual entry and CSV 
 
 ### Phase 4 — Hardening
 
-Authentication and workspaces, sharing links, role basics (viewer, editor), encrypted credential rotation, rate limits, error monitoring, production deployment notes, Playwright flows for connect, build, explain.
+Parked until I decide on production. Authentication and workspaces, sharing links, role basics (viewer, editor), encrypted credential rotation, rate limits, error monitoring, production deployment notes, Playwright flows for connect, build, explain.
 
 ## 15. Evaluation harness (build in Phase 1)
 
@@ -249,7 +249,7 @@ Every change goes through the eight stages below, and its size sets how much pap
 | 5. Verify | Unit, integration and end-to-end (Playwright) tests; the eval harness for any engine change; accessibility checks and light and dark screenshots for UI; dependency audit, secret scan and SQL-guard tests; a numbered manual test script for anything that needs live BigQuery. | docs/test-plans/NNN-name.md; CI output | Every check green |
 | 6. Review | /code-review against the standards and the spec, a security pass for sensitive changes, and a self-review checklist in the ticket. | Review notes in the ticket | No open blockers |
 | 7. Release | Semantic version, CHANGELOG entry, release notes, migration tested on a copy of the previous database, rollback plan. Tag locally. | CHANGELOG.md; docs/releases/vX.Y.Z.md | ◆ I approve any push or deploy |
-| 8. Operate | Structured logs, error reporting, health checks, backups of the app database, dependency updates. Bugs go through /diagnose, get a regression test before the fix, and a short note. | docs/runbook.md; docs/incidents/ | Runbook current |
+| 8. Operate | Local only for now: structured logs, a health check, a documented way to back up and reset the local app database, and dependency updates. Hosting, error reporting and monitoring wait for the production decision. Bugs go through /diagnose, get a regression test before the fix, and a short note. | docs/runbook.md; docs/incidents/ | Runbook current |
 
 ### Definition of ready (a ticket)
 
@@ -274,7 +274,7 @@ A linked spec, acceptance criteria written as checkable statements, test notes, 
 - Logs are structured and never contain keys, private data or raw rows.
 - Record performance budgets (dashboard first render, Explain time) and cost limits (byte cap, daily model limit), and check them in the Verify stage.
 - Write an ADR for hard-to-reverse decisions: libraries, data model, hosting, model provider.
-- Hosting is undecided. Until I decide, a release means a tagged local build that runs from docker compose.
+- Scope is local development only. Production hosting, deployment, runtime monitoring and on-call are out of scope until I decide on production, so do not design for them beyond keeping configuration in environment variables. A release means a tagged local build that runs from docker compose.
 
 ### Security and privacy review
 
@@ -283,3 +283,7 @@ For every Medium or Large change, check SQL injection and the table allowlist, c
 ### Traceability and reporting
 
 Spec criteria lead to tickets, tickets to tests, and tests to PROGRESS.md. Each phase report lists any criterion without a test. Use the section 19 template for every ticket and phase report, and add the ADRs written, the risks still open and any deviations from the spec.
+
+### Product-first mode (current)
+
+Until the main flow works end to end, every ticket must end in something I can click in the UI. Do not start backend-only tickets unless a visible ticket needs them. Use one approval gate for the spec, design and tickets together, and keep the spec to one page. Verification stays: tests for logic, one end-to-end test of the happy path (connect, choose tables, confirm the model, create a dashboard, click a point, read the explanation) and light and dark screenshots. Run the eval harness only when engine code changes. Deferred until I say so: new eval scenarios, extra injection tests, calibration write-ups, and the Known gaps list except lift and timing, which the richer explanation needs.

@@ -2,10 +2,13 @@
 
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Calendar,
   Info,
+  Plus,
   RefreshCw,
+  Settings,
 } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import {
@@ -13,9 +16,11 @@ import {
   ChartRunResult,
   DashboardChartPublic,
   DashboardPublic,
+  ModelPublic,
 } from "@/lib/api";
 import { ChartCard } from "@/components/dashboard/ChartCard";
 import { ExplainDialog } from "@/components/dashboard/ExplainDialog";
+import { AddChartModal } from "@/components/dashboard/AddChartModal";
 import { Button } from "@/components/ui/button";
 
 export default function DashboardDetailPage() {
@@ -24,6 +29,7 @@ export default function DashboardDetailPage() {
   const dashboardId = params?.id as string;
 
   const [dashboard, setDashboard] = React.useState<DashboardPublic | null>(null);
+  const [model, setModel] = React.useState<ModelPublic | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -38,10 +44,16 @@ export default function DashboardDetailPage() {
   const [chartLoading, setChartLoading] = React.useState<Record<string, boolean>>({});
   const [chartErrors, setChartErrors] = React.useState<Record<string, string>>({});
 
-  // Explain Dialog State
+  // Explain Dialog State & Persistent Explained Markers State
   const [explainChart, setExplainChart] = React.useState<DashboardChartPublic | null>(null);
   const [explainPoint, setExplainPoint] = React.useState<string | undefined>(undefined);
   const [baselineMode, setBaselineMode] = React.useState<"previous_period" | "same_weekday_last_week" | "same_period_last_year" | "trailing_average">("previous_period");
+  const [explainedPointsByChart, setExplainedPointsByChart] = React.useState<Record<string, Set<string>>>({});
+
+  // Add & Delete Chart State
+  const [isAddChartOpen, setIsAddChartOpen] = React.useState(false);
+  const [chartToDelete, setChartToDelete] = React.useState<DashboardChartPublic | null>(null);
+  const [isDeletingChart, setIsDeletingChart] = React.useState(false);
 
   // Load Dashboard Metadata
   const loadDashboard = React.useCallback(async () => {
@@ -53,6 +65,7 @@ export default function DashboardDetailPage() {
       setDashboard(data);
       if (data.model_id) {
         api.getModel(data.model_id).then((m) => {
+          setModel(m);
           if (m?.anchor_date) setAnchorDate(m.anchor_date);
         }).catch(() => {});
       }
@@ -114,11 +127,48 @@ export default function DashboardDetailPage() {
   const handleOpenExplain = (chart: DashboardChartPublic, point?: string) => {
     setExplainChart(chart);
     setExplainPoint(point);
+    if (point) {
+      setExplainedPointsByChart((prev) => {
+        const nextSet = new Set(prev[chart.id] || []);
+        nextSet.add(point);
+        return { ...prev, [chart.id]: nextSet };
+      });
+    }
   };
 
   const handleCloseExplain = () => {
     setExplainChart(null);
     setExplainPoint(undefined);
+  };
+
+  const handleChartAdded = (newChart: DashboardChartPublic) => {
+    setDashboard((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        charts: [...(prev.charts || []), newChart],
+      };
+    });
+  };
+
+  const handleDeleteChart = async () => {
+    if (!dashboard || !chartToDelete) return;
+    setIsDeletingChart(true);
+    try {
+      await api.deleteDashboardChart(dashboard.id, chartToDelete.id);
+      setDashboard((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          charts: (prev.charts || []).filter((c) => c.id !== chartToDelete.id),
+        };
+      });
+      setChartToDelete(null);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to remove chart");
+    } finally {
+      setIsDeletingChart(false);
+    }
   };
 
   const failedChartsCount = Object.values(chartErrors).filter(Boolean).length;
@@ -232,6 +282,31 @@ export default function DashboardDetailPage() {
               <RefreshCw className="h-3.5 w-3.5 mr-1" />
               <span>Refresh</span>
             </Button>
+
+            {dashboard && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsAddChartOpen(true)}
+                className="cursor-pointer"
+                data-testid="btn-add-chart"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
+                <span>Add chart</span>
+              </Button>
+            )}
+
+            {dashboard && (
+              <Link
+                href={`/data?tab=model&connection_id=${dashboard.connection_id}`}
+                data-testid="btn-edit-data-definitions"
+              >
+                <Button variant="outline" size="sm" className="cursor-pointer">
+                  <Settings className="h-3.5 w-3.5 mr-1.5" />
+                  <span>Edit data definitions</span>
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
 
@@ -265,22 +340,48 @@ export default function DashboardDetailPage() {
           </div>
         )}
 
-        {/* 5-Chart Grid */}
+        {/* Editorial Charts Layout: Hero chart full width, remaining in 2-column grid */}
         {!loading && !error && dashboard && (
-          <div className="flex flex-col gap-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {dashboard.charts.map((chart, idx) => (
-                <ChartCard
-                  key={chart.id}
-                  chart={chart}
-                  runResult={chartResults[chart.id] || null}
-                  loading={chartLoading[chart.id] || false}
-                  error={chartErrors[chart.id] || null}
-                  showHint={idx === 0}
-                  onExplain={handleOpenExplain}
-                />
-              ))}
-            </div>
+          <div className="flex flex-col gap-8">
+            {dashboard.charts && dashboard.charts.length > 0 && (
+              <div className="flex flex-col gap-6">
+                {/* Hero Chart (First chart spans full width) */}
+                <div className="w-full">
+                  <ChartCard
+                    key={dashboard.charts[0].id}
+                    chart={dashboard.charts[0]}
+                    runResult={chartResults[dashboard.charts[0].id] || null}
+                    loading={chartLoading[dashboard.charts[0].id] || false}
+                    error={chartErrors[dashboard.charts[0].id] || null}
+                    showHint={true}
+                    isHero={true}
+                    explainedPoints={explainedPointsByChart[dashboard.charts[0].id] || new Set()}
+                    onExplain={handleOpenExplain}
+                    onDelete={setChartToDelete}
+                  />
+                </div>
+
+                {/* Remaining charts formatted in a balanced two-column grid */}
+                {dashboard.charts.length > 1 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                    {dashboard.charts.slice(1).map((chart) => (
+                      <ChartCard
+                        key={chart.id}
+                        chart={chart}
+                        runResult={chartResults[chart.id] || null}
+                        loading={chartLoading[chart.id] || false}
+                        error={chartErrors[chart.id] || null}
+                        showHint={false}
+                        isHero={false}
+                        explainedPoints={explainedPointsByChart[chart.id] || new Set()}
+                        onExplain={handleOpenExplain}
+                        onDelete={setChartToDelete}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Skipped Charts Section */}
             {dashboard.skipped_charts && dashboard.skipped_charts.length > 0 && (
@@ -328,6 +429,60 @@ export default function DashboardDetailPage() {
             baselineMode={baselineMode}
             onBaselineModeChange={setBaselineMode}
           />
+        )}
+
+        {/* Add Chart Modal */}
+        {dashboard && (
+          <AddChartModal
+            open={isAddChartOpen}
+            onOpenChange={setIsAddChartOpen}
+            dashboardId={dashboard.id}
+            model={model}
+            onChartAdded={handleChartAdded}
+          />
+        )}
+
+        {/* Remove Chart Confirmation Modal */}
+        {chartToDelete && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-chart-title"
+          >
+            <div className="w-full max-w-md bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg shadow-xl p-5 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+              <div>
+                <h3 id="delete-chart-title" className="font-heading text-[16px] font-semibold text-[var(--text-main)]">
+                  Remove chart?
+                </h3>
+                <p className="text-[13px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
+                  Are you sure you want to remove <span className="font-semibold text-[var(--text-main)]">&quot;{chartToDelete.title}&quot;</span> from this dashboard?
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border-hairline)]">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setChartToDelete(null)}
+                  disabled={isDeletingChart}
+                  className="cursor-pointer"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleDeleteChart}
+                  disabled={isDeletingChart}
+                  className="cursor-pointer"
+                  data-testid="btn-confirm-delete-chart"
+                >
+                  {isDeletingChart ? "Removing..." : "Remove chart"}
+                </Button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </AppShell>

@@ -221,6 +221,81 @@ ALLOWED_METRIC_FUNCTIONS: frozenset[str] = frozenset(
 AGGREGATE_FUNCTIONS: frozenset[str] = frozenset({"SUM", "COUNT", "AVG", "MIN", "MAX"})
 
 
+ALLOWED_DIMENSION_FUNCTIONS: frozenset[str] = frozenset(
+    {
+        # Date & Time extractions & formatting
+        "EXTRACT",
+        "DATE_TRUNC",
+        "TIMESTAMP_TRUNC",
+        "DATETIME_TRUNC",
+        "DATE",
+        "DATETIME",
+        "TIMESTAMP",
+        "TIME",
+        "STRFTIME",
+        "STRPTIME",
+        "YEAR",
+        "MONTH",
+        "DAY",
+        "HOUR",
+        "MINUTE",
+        "SECOND",
+        "DAYOFWEEK",
+        "DAYOFYEAR",
+        "WEEK",
+        "QUARTER",
+        "FORMAT_DATE",
+        "FORMAT_DATETIME",
+        "FORMAT_TIMESTAMP",
+        "PARSE_DATE",
+        "PARSE_DATETIME",
+        "PARSE_TIMESTAMP",
+        # Conditionals & Null-handling
+        "CASE",
+        "COALESCE",
+        "NULLIF",
+        "IF",
+        "IFF",
+        "NVL",
+        # Math & Bucketing
+        "ROUND",
+        "FLOOR",
+        "CEIL",
+        "CEILING",
+        "ABS",
+        "SIGN",
+        "MOD",
+        "CAST",
+        "SAFE_CAST",
+        "GREATEST",
+        "LEAST",
+        # String manipulations
+        "UPPER",
+        "LOWER",
+        "TRIM",
+        "LTRIM",
+        "RTRIM",
+        "SUBSTRING",
+        "SUBSTR",
+        "CONCAT",
+        "LENGTH",
+        "LEN",
+        "REPLACE",
+        "LEFT",
+        "RIGHT",
+        "SPLIT",
+        "LPAD",
+        "RPAD",
+        "REVERSE",
+        "REGEXP_EXTRACT",
+        "REGEXP_REPLACE",
+        "STARTS_WITH",
+        "ENDS_WITH",
+        "CONTAINS_SUBSTR",
+    }
+)
+
+
 def validate_metric_expression(
     expr: str,
     dialect: str = "duckdb",
@@ -308,6 +383,80 @@ def validate_metric_expression(
                 )
 
 
+def validate_dimension_expression(
+    expr: str,
+    dialect: str = "duckdb",
+    allowed_columns: list[str] | set[str] | None = None,
+) -> None:
+    """
+    Validates user-written or generated dimension expressions per Spec 002 (AC 2.2):
+    1. Function allowlist (CASE, date parts, safe string functions, bucketing, math)
+    2. No subqueries
+    3. No window functions (OVER ...)
+    4. No aggregate functions (SUM, AVG, COUNT, MIN, MAX, etc.)
+    5. Only columns on the model's table or declared joins (when allowed_columns is provided)
+    """
+    if not expr or not expr.strip():
+        raise QueryGuardrailError("Dimension expression cannot be empty.")
+
+    if ";" in expr:
+        raise QueryGuardrailError(
+            "Guardrail violation: Multi-statement queries are forbidden in dimension expressions."
+        )
+
+    clean_dialect = dialect.lower()
+    if clean_dialect not in ("duckdb", "bigquery"):
+        clean_dialect = "duckdb"
+
+    synthetic_sql = f"SELECT {expr} FROM __whence_dimension_validation_table__"
+    root_stmt = validate_sql(synthetic_sql, dialect=clean_dialect)
+
+    if not root_stmt.expressions:
+        raise QueryGuardrailError("Dimension expression yielded no parseable projection.")
+
+    dim_target = root_stmt.expressions[0]
+    allowed_cols_set = {c.lower() for c in allowed_columns} if allowed_columns is not None else None
+
+    for node in dim_target.walk():
+        # 1. No window functions
+        if isinstance(node, (exp.Window, exp.WindowSpec)):
+            raise QueryGuardrailError(
+                "Guardrail violation: Window functions are not allowed in dimension expressions."
+            )
+
+        # 2. No subqueries
+        if node is not dim_target and isinstance(node, (exp.Select, exp.Subquery)):
+            raise QueryGuardrailError(
+                "Guardrail violation: Subqueries are not allowed in dimension expressions."
+            )
+
+        # 3. Check function invocations
+        func_name = ""
+        if isinstance(node, exp.Anonymous):
+            func_name = node.this.upper()
+        elif isinstance(node, exp.Func):
+            func_name = node.sql_name().upper()
+
+        if func_name:
+            if func_name in AGGREGATE_FUNCTIONS:
+                raise QueryGuardrailError(
+                    f"Guardrail violation: Aggregate function '{func_name}' is not allowed in dimension expressions."
+                )
+            if func_name not in ALLOWED_DIMENSION_FUNCTIONS:
+                raise QueryGuardrailError(
+                    f"Guardrail violation: Function '{func_name}' is not in the allowed dimension function list."
+                )
+
+        # 4. Column validation against model schema
+        if isinstance(node, exp.Column) and allowed_cols_set is not None:
+            col_name = node.name.lower()
+            if col_name != "*" and col_name not in allowed_cols_set:
+                raise QueryGuardrailError(
+                    f"Guardrail violation: Column '{node.name}' is not on the model's table "
+                    "or declared joins."
+                )
+
+
 class WarehouseAdapter(ABC):
     """Warehouse-agnostic adapter interface with built-in security guardrails and audit logging."""
 
@@ -323,7 +472,9 @@ class WarehouseAdapter(ABC):
         pass
 
     @abstractmethod
-    async def _execute_dry_run(self, sql: str, params: dict[str, Any] | None = None) -> DryRunResult:
+    async def _execute_dry_run(
+        self, sql: str, params: dict[str, Any] | None = None
+    ) -> DryRunResult:
         """Underlying adapter implementation for dry run."""
         pass
 

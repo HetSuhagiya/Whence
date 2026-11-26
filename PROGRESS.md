@@ -7,18 +7,19 @@
 
 ## 1. Executive Status Dashboard
 
-- **Current Version**: **v0.1.1 (Defect Fixes & Hardening for Real BigQuery Olist Connection)**
+- **Current Version**: **v0.2.3 (Product-First Mode: Ticket 4 Explain Detail v2 Delivered)**
 - **Baseline Release**: **v0.1.0 locally tagged on main (`811883c`)**
 - **Process Framework**: **Section 20 Full SDLC Binding Process (`docs/SDLC.md`)**
 - **CI Test Health**:
   - Evaluation Harness (`npm run eval`): **82.5% Engine Top-1 on Dev Set**, **80.7% on Holdout Set**, **0.0% False Positives on Controls**, **95.5% Calibration on High Confidence**, **100.0% Partial Day, Low Support & Offsetting Effects Handling**. (Zero regression across all 19 benchmark scenarios).
   - BigQuery live connection: **100% verified against real Olist BigQuery dataset (`primeval-pixel-407210:dbt_project`)** in `europe-west2`.
-  - Backend (`pytest`): **77 passed, 1 skipped (opt-in live test)** across adapters, compiler, connections, crypto, semantic layer, explain engine, narrative generation, dashboards service, and Alembic migrations.
-  - Frontend (`vitest`): **35 passed, 0 failed** across base components, connection flow, loading states, semantic layer manager, and click-to-explain dashboard UI.
-  - Playwright E2E: **Automated run completed (`frontend/scripts/e2e_olist_playwright.mjs`)** with live BigQuery query execution, chart rendering, SSE streaming Explain dialog, and light/dark screenshot artifacts.
+  - Backend (`pytest`): **90 passed, 1 skipped (opt-in live test)** across adapters, compiler, connections, crypto, custom definitions AST validator & preview, semantic layer, dependents endpoint, explain engine v2, narrative generation & direction checks, dashboards service, and Alembic migrations.
+  - Frontend (`vitest`): **62 passed, 0 failed** across custom definitions UI, chart styling & accessibility, navigation flow, base components, connection flow, loading states, semantic layer manager, click-to-explain dashboard UI, and explain detail v2 components.
+  - Production Build (`next build --turbopack`): **Clean production build** for all 6 routes (`/`, `/_not-found`, `/dashboards/[id]`, `/data`, `/dev/style`).
   - TypeScript strict (`tsc --noEmit`): **0 errors**.
-  - Python strict (`mypy --strict`): **0 errors** across all source files.
+  - Python strict (`mypy --strict`): **0 errors** across 40 source files.
   - Code standards (`ruff` + `next lint`): **0 warnings, 0 errors**.
+
 
 ---
 
@@ -43,6 +44,13 @@
 6. **Hardening — BigQuery Parameters & Truncation**:
    - BigQuery query parameters mapped to `bigquery.ScalarQueryParameter` in `_to_bq_query_parameters`.
    - Truncation on BigQuery DATE columns uses `DATE_TRUNC(col, grain)` instead of `TIMESTAMP_TRUNC(col, grain, 'UTC')`.
+7. **Fix (g) — Regional Dataset Location Persistence & Dynamic Healing (`5e32337`)**:
+   - *Root Cause*: `client.list_datasets()` returns `DatasetListItem` objects which do not contain `.location`. Initial connection creation defaulted to `"US"`. When saving sources or running the live checklist, the true table/dataset regional location (`europe-west2`) was not persisted to the `connections` table. Consequently, queries against `primeval-pixel-407210:dbt_project` attempted dry-runs in location `US`, failing with 404.
+   - *Fix*:
+     1. `save_sources`: Introspects the table/dataset reference via the BigQuery client and updates `connections.location` to the actual region (`europe-west2`).
+     2. `list_datasets` and `test_connection`: Explicitly resolve dataset references to fetch and persist the regional location.
+     3. `get_adapter_for_connection`: Dynamically self-heals any connection stuck with default `"US"` by introspecting its sources/dataset on demand and updating SQLite.
+     4. Regression tests added in `backend/tests/test_connections.py` verifying detection, persistence, and self-healing.
 
 ### 2.2 Evaluation Benchmark: Before and After
 The 19-scenario synthetic benchmark (`npm run eval`) was executed before and after the 5 defect fixes:
@@ -476,6 +484,9 @@ All screenshots are stored in `docs/screenshots/` and the conversation artifact 
 | **Step 2: Choose data & preview** | `data_step2_choose_data_light.png` | `data_step2_choose_data_dark.png` |
 | **Step 3: Test connection (Passed)** | `data_step3_test_passed_light.png` | `data_step3_test_passed_dark.png` |
 | **Step 3: Test connection (Failure with fix)**| `data_step3_test_failure_light.png`| `data_step3_test_failure_dark.png` |
+| **Data Step Indicator (4-Step Header)** | `data_step_indicator_light.png` | `data_step_indicator_dark.png` |
+| **Model Page: Create Dashboard Button** | `model_create_dashboard_light.png` | `model_create_dashboard_dark.png` |
+| **Model Deletion Dependency Warning Dialog** | `model_dependency_warning_light.png` | `model_dependency_warning_dark.png` |
 | **Semantic layer (Models, dimensions, metrics)**| `data_semantic_layer_light.png`| `data_semantic_layer_dark.png` |
 | **Semantic layer (Dimensions & eligibility contrast)**| `semantic_dimensions_light.png`| `semantic_dimensions_dark.png` |
 | **Dashboards Home** | `dashboards_home.png` | `dashboards_home.png` |
@@ -484,11 +495,313 @@ All screenshots are stored in `docs/screenshots/` and the conversation artifact 
 | **Live Explain Modal (Evidence tab)** | `explain_modal_evidence.png` | `explain_modal_dark.png` |
 | **Live Explain Modal (Data checks tab)** | `explain_modal_checks.png` | `explain_modal_dark.png` |
 | **Centred Explain Dialog** | `explain_dialog_light.png` | `explain_dialog_dark.png` |
+| **Explain Detail v2: Dimension Waterfall & Lift** | `explain_v2_dimension_light.png` | `explain_v2_dimension_dark.png` |
+| **Explain Detail v2: Timing Strip & Segment Table** | `explain_v2_timing_table_light.png` | `explain_v2_timing_table_dark.png` |
+| **Explain Detail v2: Ratio Decomposition** | `explain_v2_ratio_decomposition_light.png` | `explain_v2_ratio_decomposition_dark.png` |
 | **Dev Style Guide (`/dev/style`)** | `dev_style_light.png` | `dev_style_dark.png` |
 
 ---
 
-## 4. Continuous Maintenance Protocol
+## 5. Product-First Mode: Ticket 1 — Flow and Navigation Report (Section 19)
+
+### 5.1 Problem Solved
+Prior to Ticket 1, the data workspace maintained separate and disconnected tabs between warehouse connection setup and semantic modeling, requiring manual back-and-forth navigation without visual indication of completed, current, or blocked stages. Deleting or modifying a semantic model could silently break active dashboards and charts.
+
+### 5.2 Deliverables Implemented & Verified
+1. **Backend Dependents API (`GET /api/v1/semantic/models/{model_id}/dependents`)**:
+   - Implemented in `backend/app/semantic/router.py` & `backend/app/semantic/service.py`.
+   - Returns `{ "dashboard_count": int, "dashboards": list[DependentDashboard], "chart_count": int, "charts": list[DependentChart] }`.
+   - Supports optional query parameters `metric_name` and `dimension_name` to isolate specific downstream dependencies.
+   - Comprehensive test suite in `backend/tests/test_model_dependents.py` verifying 404 handling, empty states, full model dependents, metric-filtered queries, and dimension-filtered queries.
+2. **Persistent 4-Step Indicator (`frontend/src/components/navigation/StepIndicator.tsx`)**:
+   - Persistent 4-step progress header (`Connect` $\to$ `Choose data` $\to$ `Model` $\to$ `Dashboard`) displayed at the top of `/data`.
+   - Dynamically calculates `done`, `current`, and `blocked` states with plain-language status reasons (e.g. *"Connected: BigQuery"*, *"3 tables selected"*, *"Confirm metrics and dimensions"*, *"Confirm a semantic model before building dashboards"*).
+   - Fully interactive and accessible: clicking unblocked steps navigates between sections.
+3. **Auto-Advance to Model Tab**:
+   - Saving or confirming a connection in Step 3 immediately transitions the view directly to the `Model` (`Semantic layer`) tab with that connection preselected.
+4. **Primary Action on Model: One-Click Dashboard Creation**:
+   - Added prominent primary button `"Create dashboard from this data"` on the Model page (`SemanticLayerManager.tsx`).
+   - Automatically disabled with an explanatory tooltip (*"Confirm a semantic model before creating a dashboard"*) until a model is confirmed.
+   - Clicking it opens `CreateDashboardDialog` preselected with the active connection, builds the analytical dashboard, and redirects directly to `/dashboards/[id]`.
+5. **Contextual Action Buttons**:
+   - Connection cards on `/data` display a single next action button (`"Choose tables"` when `selected_tables_count === 0` or `"Define model"` when tables are selected).
+   - Home dashboard empty state displays `"Connect your warehouse"`.
+   - Dashboard views (`/dashboards/[id]`) display an `"Edit data definitions"` shortcut button linking back to `/data?tab=model&connection_id=...`.
+6. **Dependency Warning Modal**:
+   - Deleting a model, dimension, or metric in `SemanticLayerManager.tsx` queries `GET /api/v1/semantic/models/{id}/dependents`.
+   - If dependent charts exist, displays a warning dialog detailing the count of affected dashboards and enumerating every affected chart by title and chart type.
+   - Provides a cancel option or a guarded destructive `"Delete anyway"` confirmation.
+
+### 5.3 Automated Verification
+- **Frontend Vitest (`frontend/src/tests/navigation_flow.test.tsx`)**: 7 tests passing covering step states, contextual buttons, create dashboard button, and dependency warning dialog. Full frontend suite: **42 passed, 0 failed**.
+- **Backend Pytest (`backend/tests/test_model_dependents.py`)**: 3 tests passing covering 404, empty, and joined chart dependencies. Full backend suite: **80 passed, 1 skipped**.
+- **TypeScript strict**: **0 errors**.
+- **Python mypy**: **0 issues in 39 files**.
+- **Linters (`eslint` + `ruff`)**: **0 warnings, 0 errors**.
+- **Production Build**: **Next.js Turbopack build succeeded**.
+
+### 5.4 Visual Artifacts & Screenshot Embeds
+
+#### 1. 4-Step Workflow Progress Header (`/data`)
+| Light Mode | Dark Mode |
+| :--- | :--- |
+| ![Data Step Indicator Light](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/data_step_indicator_light.png) | ![Data Step Indicator Dark](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/data_step_indicator_dark.png) |
+
+#### 2. Model Page: Primary "Create dashboard from this data" Action
+| Light Mode | Dark Mode |
+| :--- | :--- |
+| ![Model Create Dashboard Light](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/model_create_dashboard_light.png) | ![Model Create Dashboard Dark](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/model_create_dashboard_dark.png) |
+
+#### 3. Model & Definition Dependency Warning Dialog
+| Light Mode | Dark Mode |
+| :--- | :--- |
+| ![Model Dependency Warning Light](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/model_dependency_warning_light.png) | ![Model Dependency Warning Dark](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/model_dependency_warning_dark.png) |
+
+---
+
+## 6. Workstream 3: Chart Look Redesign (Ticket 003 / Section 19)
+
+### 6.1 Context & Problem Statement
+The legacy dashboard charts relied on default Tableau 10 colors and heavy card boxes that looked generic and unrefined. Ticket 003 replaces these defaults with an editorial-grade data visualization aesthetic featuring Paul Tol muted tones, headline numbers with period-over-period delta badges, hairline rules, faint dashed comparison baselines, custom HTML tooltips, persistent explained-point markers, and strict $\ge 3:1$ graphical object contrast in both light and dark modes.
+
+### 6.2 Deliverables Implemented & Verified
+1. **Palette Tokens & Contrast Hardening (`frontend/src/styles/tokens.css` & `frontend/src/app/globals.css`)**:
+   - Completely eradicated Tableau 10 palette across the codebase.
+   - Ink series tokens: Main series ink (`#111827` light / `#F9FAFB` dark, `slate12`), baseline (`#889096`, `slate8`), highlight (`#0090FF`, `blue9`).
+   - Paul Tol muted 10-color breakdown palette in exact order: `#332288`, `#88CCEE`, `#44AA99`, `#117733`, `#999933`, `#DDCC77`, `#CC6677`, `#882255`, `#AA4499`, `#DDDDDD`.
+   - Waterfall uses Radix `green9` (`#30A46C` light / `#3DD68C` dark) for increases and `red9` (`#E54D2E` light / `#F3705A` dark) for decreases.
+   - **Contrast Verification**: Verified graphical object contrast against light (`#FFFFFF`) and dark (`#111827` / `#0F172A`) backgrounds. All series and indicators achieve $\ge 3:1$ graphical contrast (e.g. Ink Light: 17.74:1, Ink Dark: 16.98:1, Baseline: 3.24:1 light / 5.47:1 dark, Highlight: 3.26:1 light / 5.43:1 dark, Waterfall Up: 3.16:1 light / 9.46:1 dark, Waterfall Down: 3.87:1 light / 6.15:1 dark).
+   - Dedicated high-contrast variants provided in tokens (`--chart-tol-*-contrast`) to guarantee strict compliance in both environments.
+2. **Time Series & Axes Styling (`frontend/src/components/dashboard/ChartCard.tsx`)**:
+   - 2px stroke width, rounded line joins, zero point markers until hover.
+   - Faint dashed line behind (`borderDash: [4, 4]`, `slate8`) representing previous-period comparison baseline data.
+   - Direct end-of-line series label drawn by `whenceChartEditorialPlugin` instead of cluttered top legends.
+   - Clean flat background without gradients or excessive area fills.
+   - Outer chart border box dropped. Exactly 3 horizontal hairline gridlines (bottom, mid, top) with 12px Instrument Sans muted ticks and tabular numerals (`tabular-nums`).
+3. **Bar Charts**:
+   - Flat fills with 2px corner radius only at data ends (`topLeft: 2, topRight: 2`).
+   - Clean formatted value labels at bar tips when space permits.
+   - Category breakdowns sorted descending by metric value.
+4. **Card Layout & Typography**:
+   - Dropped boxed cards in favor of clean hairline rule dividers (`border-b border-[var(--border-hairline)]`).
+   - Headline metric number and period-over-period delta badge (with directional sign `+`/`-` and arrow `↑`/`↓`).
+   - Title rendered in Newsreader serif (`font-serif`, 18–20px); definition line in muted Instrument Sans (`font-sans`, 12px).
+   - First chart spans full width as an editorial **hero**; remaining charts format into a balanced 2-column grid.
+5. **Custom HTML Tooltip & Persistent Explained Marker**:
+   - Custom floating HTML tooltip rendering current metric value, change vs previous period / baseline, and `"Click to explain"` prompt.
+   - Once Explain is triggered on a point, a persistent marker ring remains on the chart for the remainder of the session (tracked via `explainedPointsByChart` state).
+6. **Accessibility Verification**:
+   - Keyboard point navigation with `ArrowRight` / `ArrowLeft` across points, `Enter` to trigger explain.
+   - Screen-reader accessible data table view toggled via `Alt + T` or toolbar button.
+   - `prefers-reduced-motion` fully respected with minimal durations.
+
+### 6.3 Automated Verification
+- **Frontend Vitest (`frontend/src/tests/chart_styling.test.tsx`)**: 6 comprehensive unit tests passing covering tokens, palette, time-series baseline, bar sorting, keyboard navigation, table view toggle, and `ExplainWaterfall` Radix colors.
+- **Frontend Suite Total**: **48 passed, 0 failed** across all 7 test files.
+- **TypeScript strict**: **0 errors**.
+- **Production Build**: **Next.js Turbopack build succeeded**.
+
+### 6.4 Visual Artifacts & Screenshot Embeds
+
+#### 1. Full Dashboard Chart Redesign
+| Light Mode | Dark Mode |
+| :--- | :--- |
+| ![Chart Redesign Light](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/chart_redesign_light.png) | ![Chart Redesign Dark](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/chart_redesign_dark.png) |
+
+#### 2. Hero Chart (Headline Number, Delta Badge, Hairline Rule)
+| Light Mode | Dark Mode |
+| :--- | :--- |
+| ![Chart Hero Light](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/chart_hero_light.png) | ![Chart Hero Dark](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/chart_hero_dark.png) |
+
+---
+
+## 8. Ticket 2: Custom Metrics and Dimensions Implementation (Section 19)
+
+### 8.1 Backend & Engine Delivery
+1. **Alembic Migration 0004 (`backend/alembic/versions/0004_add_custom_definitions.py`)**:
+   - Added `guided_config` (text/json) to `metrics` table.
+   - Added `is_custom` (boolean, default false) and `expression` (text, nullable) to `dimensions` table.
+   - Verified with up and down migration tests in `backend/tests/test_migrations.py`.
+2. **Unified AST Validator (`backend/app/adapters/base.py`)**:
+   - Implemented `validate_dimension_expression(expr_str, dialect, model_columns)` using `sqlglot`.
+   - Strictly enforces function allowlist (`CASE`, `WHEN`, `THEN`, `ELSE`, `END`, `COALESCE`, `NULLIF`, `CONCAT`, `SUBSTRING`, `TRIM`, `LOWER`, `UPPER`, `DATE_TRUNC`, `EXTRACT`, `CAST`).
+   - Forbids subqueries, window functions, and aggregates in dimension expressions.
+3. **Dry-Run Preview Endpoint (`POST /api/v1/semantic/dimensions/preview`)**:
+   - Dry-runs expression with BigQuery / DuckDB adapter, checks estimated byte scan against maximum byte cap (10.0 GB).
+   - Executes query returning `estimated_bytes`, `formatted_bytes`, `total_distinct_values`, and top 20 distinct values with row counts.
+4. **Dashboard Chart CRUD Endpoints**:
+   - `POST /api/v1/dashboards/{id}/charts`: Adds a chart to a dashboard using standard or custom metrics/dimensions.
+   - `DELETE /api/v1/dashboards/{id}/charts/{chart_id}`: Removes a chart from a dashboard.
+5. **Compiler, Planner & Explain Engine**:
+   - `QueryCompiler`: Inlines custom dimension expressions into `SELECT` and `GROUP BY` clauses, and supports custom dimensions in chart filters.
+   - `DashboardPlanner` & `CreateDashboardDialog`: Identifies and exposes custom metrics and dimensions with badges.
+   - `ExplainEngine`: Groups by custom dimension expressions and decomposes ratio metrics across custom dimensions using rate/mix split.
+6. **Automated Backend Tests (`backend/tests/test_custom_definitions.py`)**:
+   - Verified AST validation, dry-run preview, query compiler inlining, chart CRUD, and ratio metric decomposition over custom dimension. Total backend suite: **85 passed, 1 skipped**.
+
+### 8.2 Frontend Delivery
+1. **GuidedMetricBuilder (`frontend/src/components/semantic/GuidedMetricBuilder.tsx`)**:
+   - Guided mode: standard aggregations (`SUM`, `AVG`, `COUNT`, `COUNT_DISTINCT`, `MIN`, `MAX`) and target column selector.
+   - Ratio mode: measure ratio configuration (`numerator_measure / denominator_measure`).
+   - Advanced SQL toggle: raw formula input with AST dry-run validation.
+   - Live 30-day preview trend chart and version history viewer.
+2. **DimensionBuilderModal (`frontend/src/components/semantic/DimensionBuilderModal.tsx`)**:
+   - Name, label, type (`categorical`, `numeric_bucket`, `time`), SQL expression.
+   - Presets for CASE tiering, date truncations, and string transformations.
+   - Dry-run validation displaying estimated scanned bytes.
+   - Live top 20 distinct values preview table with counts.
+   - "Exclude from automated explanation" toggle.
+3. **Usage Awareness & Deletion Safety**:
+   - Displays "Used by N charts" warning when editing or deleting metrics and dimensions.
+   - Modal warning lists dependent dashboards and charts before allowing deletion.
+4. **Dashboard Chart Controls (`frontend/src/app/dashboards/[id]/page.tsx` & `AddChartModal.tsx`)**:
+   - "Add chart" button in header opening `AddChartModal` with metric, breakdown dimension, chart type, date range, and title.
+   - "Remove chart" button with modal confirmation dialog.
+
+### 8.3 Visual Artifacts & Screenshot Embeds
+
+#### 1. Metric Guided Builder
+| Light Mode | Dark Mode |
+| :--- | :--- |
+| ![Metric Guided Builder Light](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/metric_guided_builder_light.png) | ![Metric Guided Builder Dark](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/metric_guided_builder_dark.png) |
+
+#### 2. Dimension Builder with Top-20 Values Live Preview
+| Light Mode | Dark Mode |
+| :--- | :--- |
+| ![Dimension Builder Preview Light](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/dimension_builder_preview_light.png) | ![Dimension Builder Preview Dark](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/dimension_builder_preview_dark.png) |
+
+#### 3. Dashboard Add Chart Modal
+| Light Mode | Dark Mode |
+| :--- | :--- |
+| ![Dashboard Add Chart Light](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/dashboard_add_chart_light.png) | ![Dashboard Add Chart Dark](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/dashboard_add_chart_dark.png) |
+
+---
+
+## 9. Workstream 4: Explain Detail v2 Implementation Report (Ticket 004 / Section 19)
+
+### 9.1 Context & Problem Statement
+Prior to Ticket 004, the Explain modal surfaced a single driver waterfall along with high-level validity checks, but lacked transparent, granular deterministic evidence. Users and analysts could not examine:
+1. Multi-dimension breakdowns with relative change attribution.
+2. Segment lift relative to baseline ($\text{Share of Change} / \text{Share of Baseline}$).
+3. Intra-window temporal concentration (day-by-day timing distribution strip and plain factual summaries).
+4. Direct baseline vs current segment comparisons (value, absolute delta, % change).
+5. Deterministic volume, mix, and rate effect decomposition for ratio metrics.
+6. Transparent reporting of evaluated dimensions ruled out as non-explanatory.
+7. Itemized confidence scorecard evaluating data completeness, volatility, seasonality, and anomaly checks.
+8. Non-causal, objective inquiry questions prompting analysts where to investigate next without hallucinating causes.
+
+### 9.2 Deliverables Implemented & Verified
+
+#### 1. Deterministic Evidence Model & Engine (`backend/app/explain/`)
+- **Model Extensions (`models.py`)**:
+  - `dimension_waterfalls: dict[str, list[WaterfallStep]]`: Per-dimension waterfall step breakdowns.
+  - `dimension_shares: dict[str, float]`: Share of total change explained by each evaluated dimension.
+  - `lift_by_segment: dict[str, dict[str, float]]`: Segment lift metric ($\text{Share of Change} / \text{Share of Baseline}$).
+  - `timing_strip: list[dict[str, Any]]`: Daily intra-window movement points with date, change amount, and share.
+  - `timing_summary: str`: Factual concentration sentence (e.g. `"62.4% of the change was concentrated on 2017-11-24"` or `"Change was distributed relatively evenly across 7 periods"`).
+  - `segment_comparison_table: list[dict[str, Any]]`: Segment comparison rows with baseline, current, delta, percent change, and lift.
+  - `ratio_decomposition: dict[str, Any] | None`: Structured volume effect, mix effect, rate effect, and plain text description.
+  - `ruled_out_dimensions: list[str]`: Dimensions whose top segments explained < 5% of overall movement.
+  - `confidence_breakdown: list[dict[str, Any]]`: Itemized check scorecard (`Data Completeness`, `Volatility / Noise`, `Seasonality Match`, `Anomaly Clearance`).
+  - `next_inquiries: list[str]`: Strictly non-causal inquiry questions for analysts.
+- **Engine Computation (`engine.py` & `pipeline.py`)**:
+  - Assembles and computes all 11 evidence structures deterministically without heuristic tuning.
+  - Decomposes ratio metrics ($R = N / D$) mathematically into volume, mix, and rate components.
+  - Identifies temporal spike concentrations whenever a single day accounts for $\ge 35\%$ of total movement.
+
+#### 2. Narrative & Direction-Aware NumberChecker (`backend/app/narrative/` & `backend/app/explain/narrative.py`)
+- Upgraded `NumberChecker` to enforce directional consistency:
+  - If a metric increased, the narrative must use positive change words ("rose", "increased", "grew") and cannot say "fell" or "dropped".
+  - If a metric decreased, negative change words are strictly required.
+- Collects numbers across all new `Evidence` attributes (segment comparison values, lift ratios, timing shares, ratio decomposition amounts, ruled-out counts) ensuring 0 hallucinated figures reach the user.
+
+#### 3. Frontend Explain Dialog v2 (`frontend/src/components/dashboard/`)
+- **`ExplainDialog.tsx`**: Modularized with header summary, confidence badge, directional delta pills, and tabbed evidence sections.
+- **`DimensionSelectorWaterfall.tsx`**: Per-dimension pill selector displaying share of total change with reactive waterfall visualization.
+- **`TimingDistributionStrip.tsx`**: Intra-window day-by-day mini bar chart with percentage badges and bold factual summary.
+- **`SegmentComparisonTable.tsx`**: Formatted baseline vs current comparison table with delta indicators and segment lift badges.
+- **`RatioDecompositionPanel.tsx`**: 3-card breakdown for Volume, Mix, and Rate effects with plain English explanation.
+- **`ConfidenceScorecard.tsx`**: Itemized transparent validation checklist with status badges and impact weights.
+- **`NextInquiriesList.tsx`**: Inquiry questions highlighting specific segments and dates for analyst investigation.
+
+### 9.3 Evaluation Benchmark: Before and After (Zero Regressions)
+The 19-scenario synthetic benchmark (`npm run eval`) was executed before and after the Explain v2 engine changes:
+
+| Metric | Baseline (v0.2.2) | Post-Engine v2 (v0.2.3) | Status |
+| :--- | :--- | :--- | :--- |
+| **Dev Set Top-1 Hit Rate** | 82.5% | 82.5% | Zero regression |
+| **Holdout Test Set Top-1** | 80.7% | 80.7% | Zero regression |
+| **Baseline Top-1 Hit Rate** | 45.6% | 45.6% | Benchmark baseline |
+| **Control False Positive Rate** | 0.0% | 0.0% | 100% Noise/Dip immunity |
+| **Calibration (High Confidence)** | 95.5% | 95.5% | Well calibrated |
+| **Partial Day Handling** | 100.0% | 100.0% | Perfect handling |
+| **Low Support Handling** | 100.0% | 100.0% | Perfect handling |
+| **Offsetting Effects Handling** | 100.0% | 100.0% | Perfect handling |
+
+### 9.4 Real-Data Olist Evaluation Runs (Live BigQuery `primeval-pixel-407210`)
+The six historical evaluation periods were rerun via `eval/run_olist_real_data.py` on live BigQuery in `europe-west2` without dataset tuning:
+
+| Period | Baseline Window | Current Window | Delta Revenue | Timing Concentration | Ruled-Out Dims | Key Inquiries |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **(a) Black Friday 2017 Spike** | 2017-11-13 to 2017-11-19 | 2017-11-20 to 2017-11-26 | +R$ 231,349.37 (+131.6%) | Distributed evenly across 7 days | None (<5%) | Marketing/pricing in 'SP'; Tracking/schema deploy 2017-11-20 |
+| **(b1) Ordinary Week 1 (Mar 2017)** | 2017-03-06 to 2017-03-12 | 2017-03-13 to 2017-03-19 | +R$ 17,162.22 (+21.9%) | Distributed evenly across 7 days | None (<5%) | Marketing/pricing in 'watches_gifts'; Deploy 2017-03-13 |
+| **(b2) Ordinary Week 2 (May 2017)** | 2017-05-08 to 2017-05-14 | 2017-05-15 to 2017-05-21 | +R$ 9,130.69 (+8.1%) | Distributed evenly across 7 days | None (<5%) | Marketing/pricing in 'SP'; Deploy 2017-05-15 |
+| **(b3) Ordinary Week 3 (Jul 2017)** | 2017-07-10 to 2017-07-16 | 2017-07-17 to 2017-07-23 | +R$ 8,186.62 (+7.2%) | Distributed evenly across 7 days | None (<5%) | Marketing/pricing in 'RJ'; Deploy 2017-07-17 |
+| **(b4) Ordinary Week 4 (Aug 2017)** | 2017-08-14 to 2017-08-20 | 2017-08-21 to 2017-08-27 | -R$ 20,353.80 (-16.0%) | Distributed evenly across 7 days | None (<5%) | Marketing/pricing in 'SP'; Deploy 2017-08-21 |
+| **(b5) Ordinary Week 5 (Oct 2017)** | 2017-10-09 to 2017-10-15 | 2017-10-16 to 2017-10-22 | +R$ 9,058.51 (+5.8%) | Distributed evenly across 7 days | None (<5%) | Marketing/pricing in 'SP'; Deploy 2017-10-16 |
+
+### 9.5 Automated Verification
+1. **Pytest (`backend/tests/test_explain_v2.py` + full suite)**:
+   - `test_single_day_spike_timing`: Verified single-day spike concentration (>35%) generates factual concentration statement.
+   - `test_broad_rise_segment_lift`: Verified broad-based rise where lift ratios cluster near 1.0.
+   - `test_ratio_metric_decomposition`: Verified volume, mix, and rate effects sum to total ratio change.
+   - `test_direction_check_sign_flip`: Verified `NumberChecker` rejects directionally inverted narrative claims.
+   - `test_evidence_v2_assembly`: Verified full deterministic assembly of all 11 evidence structures.
+   - Total backend suite: **90 passed, 1 skipped**.
+2. **Vitest (`frontend/src/tests/explain_v2_ui.test.tsx` + full suite)**:
+   - 7 dedicated tests asserting rendering of dimension selector, lift badges, timing mini bar strip, baseline-vs-current table, ratio decomposition cards, scorecard checks, and next inquiries.
+   - Total frontend suite: **62 passed, 0 failed**.
+3. **CI Standards**:
+   - `npm run lint`: 0 ESLint warnings/errors, 0 Ruff errors.
+   - `npm run typecheck`: 0 TypeScript errors, 0 Mypy strict errors (40 source files).
+   - `npm run build`: Turbopack production build succeeded cleanly.
+
+### 9.6 Visual Artifacts & Screenshot Embeds
+
+#### 1. Per-Dimension Selector Waterfall & Segment Lift
+| Light Mode | Dark Mode |
+| :--- | :--- |
+| ![Explain v2 Dimension Light](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/explain_v2_dimension_light.png) | ![Explain v2 Dimension Dark](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/explain_v2_dimension_dark.png) |
+
+#### 2. Timing Distribution Strip & Segment Comparison Table
+| Light Mode | Dark Mode |
+| :--- | :--- |
+| ![Explain v2 Timing Table Light](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/explain_v2_timing_table_light.png) | ![Explain v2 Timing Table Dark](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/explain_v2_timing_table_dark.png) |
+
+#### 3. Ratio Metric Volume, Mix & Rate Decomposition
+| Light Mode | Dark Mode |
+| :--- | :--- |
+| ![Explain v2 Ratio Decomposition Light](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/explain_v2_ratio_decomposition_light.png) | ![Explain v2 Ratio Decomposition Dark](file:///Users/het09/Desktop/Development/Whence/docs/screenshots/explain_v2_ratio_decomposition_dark.png) |
+
+### 9.7 Manual Test Script
+1. Run backend server: `source backend/venv/bin/activate && uvicorn app.main:app --port 8000`
+2. Run frontend server: `npm run dev`
+3. Navigate to `http://localhost:3000/dashboards/demo-dashboard` (or an active dashboard).
+4. Click on any chart data point (e.g. Total Revenue or Average Order Value on a specific date).
+5. Verify the **Explain Detail v2 Dialog** appears:
+   - Verify header shows Metric, Date Window, Absolute & % Delta with directional badges.
+   - In **Drivers & Waterfalls**: Select between available dimensions (e.g. `state` vs `category`). Observe the waterfall chart re-render dynamically.
+   - Inspect **Segment Lift**: Observe the lift ratio pill (e.g. `1.8x baseline`) alongside share of change vs share of baseline.
+   - Inspect **Timing Distribution**: View the intra-window mini bar strip and verify the factual summary statement.
+   - In **Segment Table**: Review the comparison rows with Baseline, Current, Delta, and % Change.
+   - For ratio metrics (e.g. Average Order Value): Inspect the **Ratio Decomposition** tab to see Volume, Mix, and Rate cards with explanatory narrative.
+   - In **Data Quality & Scorecard**: Verify transparent checklist with status badges (completeness, noise/volatility, seasonality, anomalies).
+   - In **Next Inquiries**: Verify actionable follow-up questions for analysts without causal claims.
+6. Toggle dark mode in the header and verify all charts, badges, and tables maintain high-contrast styling and WCAG compliance.
+
+---
+
+## 10. Continuous Maintenance Protocol
 
 Whenever any code, test, or configuration is changed:
 1. Update the **Executive Status Dashboard** in Section 1 (current item, test pass rates).

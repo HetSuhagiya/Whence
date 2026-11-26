@@ -22,12 +22,16 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { CreateDashboardDialog } from "@/components/dashboard/CreateDashboardDialog";
+import { GuidedMetricBuilder } from "@/components/semantic/GuidedMetricBuilder";
+import { DimensionBuilderModal } from "@/components/semantic/DimensionBuilderModal";
 import {
   api,
   ConnectionPublic,
   DimensionPublic,
   MetricPublic,
   MetricVersionPublic,
+  ModelDependentsResponse,
   ModelPublic,
 } from "@/lib/api";
 import {
@@ -36,9 +40,11 @@ import {
   CheckCircle2,
   Clock,
   History,
+  LayoutDashboard,
   Plus,
   RefreshCw,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
 
@@ -78,6 +84,12 @@ export function SemanticLayerManager({
   // Dimension exclusion toggle in flight
   const [togglingDimId, setTogglingDimId] = React.useState<string | null>(null);
 
+  // Custom modals
+  const [isGuidedMetricOpen, setIsGuidedMetricOpen] = React.useState(false);
+  const [editingMetric, setEditingMetric] = React.useState<MetricPublic | null>(null);
+  const [isDimensionModalOpen, setIsDimensionModalOpen] = React.useState(false);
+  const [editingDimension, setEditingDimension] = React.useState<DimensionPublic | null>(null);
+
   // Metric builder dialog state
   const [isBuilderOpen, setIsBuilderOpen] = React.useState(false);
   const [builderName, setBuilderName] = React.useState("");
@@ -108,6 +120,19 @@ export function SemanticLayerManager({
   const [versions, setVersions] = React.useState<MetricVersionPublic[]>([]);
   const [loadingVersions, setLoadingVersions] = React.useState(false);
 
+  // Create Dashboard Dialog state
+  const [isCreateDashboardOpen, setIsCreateDashboardOpen] = React.useState(false);
+
+  // Deletion and Dependents Warning State
+  const [deleteTarget, setDeleteTarget] = React.useState<{
+    type: "model" | "dimension" | "metric";
+    id: string;
+    name: string;
+  } | null>(null);
+  const [dependentsWarning, setDependentsWarning] =
+    React.useState<ModelDependentsResponse | null>(null);
+  const [isDeletingItem, setIsDeletingItem] = React.useState(false);
+
   // Sync prop changes
   React.useEffect(() => {
     if (selectedConnectionId && selectedConnectionId !== activeConnId) {
@@ -122,10 +147,11 @@ export function SemanticLayerManager({
     setError(null);
     try {
       const list = await api.listModels(connId);
-      setModels(list);
-      setSelectedModel(list[0] || null);
+      setModels(list || []);
+      setSelectedModel((list && list[0]) || null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load models");
+      setModels([]);
     } finally {
       setLoading(false);
     }
@@ -170,6 +196,74 @@ export function SemanticLayerManager({
       setError(err instanceof Error ? err.message : "Failed to update dimension");
     } finally {
       setTogglingDimId(null);
+    }
+  };
+
+  // Model & Definition Deletion Handlers with Dependency Awareness
+  const handlePromptDeleteModel = async (model: ModelPublic) => {
+    try {
+      const deps = await api.getModelDependents(model.id);
+      setDependentsWarning(deps);
+      setDeleteTarget({ type: "model", id: model.id, name: model.name });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to check dependents");
+    }
+  };
+
+  const handlePromptDeleteDimension = async (dim: DimensionPublic) => {
+    if (!selectedModel) return;
+    try {
+      const deps = await api.getModelDependents(selectedModel.id, {
+        dimension_name: dim.name,
+      });
+      setDependentsWarning(deps);
+      setDeleteTarget({
+        type: "dimension",
+        id: dim.id,
+        name: dim.label || dim.name,
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to check dependents");
+    }
+  };
+
+  const handlePromptDeleteMetric = async (metric: MetricPublic) => {
+    if (!selectedModel) return;
+    try {
+      const deps = await api.getModelDependents(selectedModel.id, {
+        metric_name: metric.name,
+      });
+      setDependentsWarning(deps);
+      setDeleteTarget({
+        type: "metric",
+        id: metric.id,
+        name: metric.name,
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to check dependents");
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeletingItem(true);
+    try {
+      if (deleteTarget.type === "model") {
+        await api.deleteModel(deleteTarget.id);
+        await loadModels(activeConnId);
+      } else if (deleteTarget.type === "dimension") {
+        await api.deleteDimension(deleteTarget.id);
+        await loadModels(activeConnId);
+      } else if (deleteTarget.type === "metric") {
+        await api.deleteMetric(deleteTarget.id);
+        await loadModels(activeConnId);
+      }
+      setDeleteTarget(null);
+      setDependentsWarning(null);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to delete item");
+    } finally {
+      setIsDeletingItem(false);
     }
   };
 
@@ -293,7 +387,7 @@ export function SemanticLayerManager({
       {
         label: builderName || "Preview",
         data: previewSeries.map((p) => p.value),
-        borderColor: "#4E79A7", // Tableau 10 primary
+        borderColor: "#111827", // Ink series primary
         backgroundColor: "rgba(78, 121, 167, 0.08)",
         borderWidth: 2,
         pointRadius: 2,
@@ -342,25 +436,53 @@ export function SemanticLayerManager({
           </p>
         </div>
 
-        {connections.length > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-[12px] text-[var(--text-muted)]">Connection:</span>
-            <select
-              value={activeConnId}
-              onChange={(e) => {
-                setActiveConnId(e.target.value);
-                onConnectionChange?.(e.target.value);
-              }}
-              className="h-8 px-2.5 text-[13px] rounded-[4px] border border-[var(--border-hairline)] bg-[var(--bg-surface)] text-[var(--text-main)] focus:outline-none focus:border-[var(--accent-blue-11)]"
+        <div className="flex flex-wrap items-center gap-3">
+          {connections.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] text-[var(--text-muted)]">Connection:</span>
+              <select
+                value={activeConnId}
+                onChange={(e) => {
+                  setActiveConnId(e.target.value);
+                  onConnectionChange?.(e.target.value);
+                }}
+                className="h-8 px-2.5 text-[13px] rounded-[4px] border border-[var(--border-hairline)] bg-[var(--bg-surface)] text-[var(--text-main)] focus:outline-none focus:border-[var(--accent-blue-11)]"
+                data-testid="select-semantic-connection"
+              >
+                {connections.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.warehouse_type})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Primary Create Dashboard Action with Disabled Tooltip */}
+          <div className="relative group">
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={!selectedModel}
+              onClick={() => setIsCreateDashboardOpen(true)}
+              className="cursor-pointer"
+              data-testid="btn-create-dashboard-from-model"
+              title={!selectedModel ? "Confirm a semantic model before creating a dashboard" : undefined}
             >
-              {connections.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.warehouse_type})
-                </option>
-              ))}
-            </select>
+              <LayoutDashboard className="h-4 w-4 mr-1.5" />
+              <span>Create dashboard from this data</span>
+            </Button>
+            {!selectedModel && (
+              <div
+                role="tooltip"
+                className="absolute right-0 top-full mt-1.5 hidden group-hover:block z-50 px-2.5 py-1 text-[11px] rounded bg-[var(--bg-overlay)] border border-[var(--border-hairline)] text-[var(--text-muted)] shadow-md whitespace-nowrap"
+                data-testid="tooltip-disabled-create-dashboard"
+              >
+                Confirm a semantic model before creating a dashboard
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       {error && (
@@ -371,7 +493,7 @@ export function SemanticLayerManager({
       )}
 
       {/* Empty State / Seed Prompt */}
-      {models.length === 0 && !loading && (
+      {(!models || models.length === 0) && !loading && (
         <div className="p-8 rounded-[4px] border border-[var(--border-hairline)] bg-[var(--bg-surface)] text-center flex flex-col items-center max-w-xl mx-auto my-6">
           <div className="h-10 w-10 rounded-full bg-[var(--accent-blue-11)]/10 text-[var(--accent-blue-11)] flex items-center justify-center mb-3">
             <Sparkles className="h-5 w-5" />
@@ -422,9 +544,23 @@ export function SemanticLayerManager({
             </div>
             <div className="flex items-center gap-2">
               <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handlePromptDeleteModel(selectedModel)}
+                className="text-[var(--text-muted)] hover:text-[var(--trend-down)] cursor-pointer"
+                title="Delete model"
+                data-testid="btn-delete-model"
+              >
+                <Trash2 className="h-4 w-4 text-[var(--trend-down)] mr-1" />
+                <span>Delete model</span>
+              </Button>
+              <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => setIsBuilderOpen(true)}
+                onClick={() => {
+                  setEditingMetric(null);
+                  setIsGuidedMetricOpen(true);
+                }}
                 data-testid="add-metric-button"
               >
                 <Plus className="h-3.5 w-3.5 mr-1" />
@@ -443,6 +579,18 @@ export function SemanticLayerManager({
                   columns to exclude them from automated explanation scans.
                 </p>
               </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setEditingDimension(null);
+                  setIsDimensionModalOpen(true);
+                }}
+                data-testid="add-dimension-button"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add dimension
+              </Button>
             </div>
 
             <div className="rounded-[4px] border border-[var(--border-hairline)] overflow-hidden bg-[var(--bg-surface)]">
@@ -453,6 +601,7 @@ export function SemanticLayerManager({
                     <th className="py-2 px-3 font-medium">SQL expression</th>
                     <th className="py-2 px-3 font-medium">Type</th>
                     <th className="py-2 px-3 font-medium">Explanation eligibility</th>
+                    <th className="py-2 px-3 font-medium text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border-hairline)]">
@@ -508,6 +657,17 @@ export function SemanticLayerManager({
                           )}
                         </button>
                       </td>
+                      <td className="py-2 px-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handlePromptDeleteDimension(dim)}
+                          className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--trend-down)] transition-colors cursor-pointer"
+                          title={`Delete dimension ${dim.name}`}
+                          data-testid={`btn-delete-dimension-${dim.name}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-[var(--trend-down)]" />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -535,7 +695,7 @@ export function SemanticLayerManager({
                     <th className="py-2 px-3 font-medium">Type</th>
                     <th className="py-2 px-3 font-medium">Formula</th>
                     <th className="py-2 px-3 font-medium">Format</th>
-                    <th className="py-2 px-3 font-medium text-right">Version</th>
+                    <th className="py-2 px-3 font-medium text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border-hairline)]">
@@ -582,14 +742,26 @@ export function SemanticLayerManager({
                         {m.display_format}
                       </td>
                       <td className="py-2 px-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleViewVersions(m)}
-                          className="inline-flex items-center gap-1 text-[11px] font-mono text-[var(--accent-blue-11)] hover:underline"
-                        >
-                          <History className="h-3 w-3" />
-                          v{m.version}
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleViewVersions(m)}
+                            className="inline-flex items-center gap-1 text-[11px] font-mono text-[var(--accent-blue-11)] hover:underline"
+                            title="View version history"
+                          >
+                            <History className="h-3 w-3" />
+                            v{m.version}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handlePromptDeleteMetric(m)}
+                            className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--trend-down)] transition-colors cursor-pointer"
+                            title={`Delete metric ${m.name}`}
+                            data-testid={`btn-delete-metric-${m.name}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-[var(--trend-down)]" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -840,6 +1012,140 @@ export function SemanticLayerManager({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Prominent Create Dashboard Dialog */}
+      <CreateDashboardDialog
+        open={isCreateDashboardOpen}
+        onOpenChange={setIsCreateDashboardOpen}
+        connections={connections}
+        defaultConnectionId={activeConnId}
+      />
+
+      {/* Dependency Warning Dialog */}
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null);
+            setDependentsWarning(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg" data-testid="dependency-warning-dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[var(--trend-down)]">
+              <AlertCircle className="h-5 w-5 text-[var(--trend-down)] shrink-0" />
+              <span>
+                {dependentsWarning && dependentsWarning.chart_count > 0
+                  ? "Dependent charts will be affected"
+                  : `Delete ${deleteTarget?.type}`}
+              </span>
+            </DialogTitle>
+            <DialogDescription>
+              {dependentsWarning && dependentsWarning.chart_count > 0 ? (
+                <span>
+                  Deleting {deleteTarget?.type} <strong>&quot;{deleteTarget?.name}&quot;</strong> will break{" "}
+                  <strong>{dependentsWarning.chart_count}</strong> chart{dependentsWarning.chart_count === 1 ? "" : "s"}{" "}
+                  across <strong>{dependentsWarning.dashboard_count}</strong> dashboard{dependentsWarning.dashboard_count === 1 ? "" : "s"}.
+                </span>
+              ) : (
+                <span>
+                  Are you sure you want to delete this {deleteTarget?.type} <strong>&quot;{deleteTarget?.name}&quot;</strong>? This action cannot be undone.
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          {dependentsWarning && dependentsWarning.charts.length > 0 && (
+            <div className="my-2 flex flex-col gap-2">
+              <div className="text-[12px] font-medium text-[var(--text-muted)] uppercase tracking-wider">
+                Affected charts by title ({dependentsWarning.chart_count}):
+              </div>
+              <div className="max-h-48 overflow-y-auto rounded-[4px] border border-[var(--border-hairline)] bg-[var(--bg-app)] divide-y divide-[var(--border-hairline)]">
+                {dependentsWarning.charts.map((chart) => (
+                  <div
+                    key={chart.id}
+                    className="p-2.5 flex items-center justify-between text-[12px]"
+                    data-testid={`affected-chart-${chart.id}`}
+                  >
+                    <div>
+                      <span className="font-medium text-[var(--text-main)] block">
+                        {chart.title}
+                      </span>
+                      {chart.dashboard_name && (
+                        <span className="text-[11px] text-[var(--text-muted)]">
+                          Dashboard: {chart.dashboard_name}
+                        </span>
+                      )}
+                    </div>
+                    {chart.chart_type && (
+                      <span className="px-1.5 py-0.5 font-mono text-[10px] rounded bg-[var(--bg-subtle)] text-[var(--text-muted)] border border-[var(--border-hairline)]">
+                        {chart.chart_type}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="p-2.5 rounded-[4px] border border-[var(--trend-down)]/40 bg-[var(--trend-down-subtle)]/30 text-[12px] text-[var(--trend-down)]">
+                Warning: These dashboards and charts depend on this definition and may fail to query or display error banners if deleted.
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-hairline)]">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setDeleteTarget(null);
+                setDependentsWarning(null);
+              }}
+              disabled={isDeletingItem}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleConfirmDelete}
+              isLoading={isDeletingItem}
+              disabled={isDeletingItem}
+              className="bg-[var(--trend-down)] hover:bg-[var(--trend-down)]/90 text-white border-transparent"
+              data-testid="btn-confirm-delete-anyway"
+            >
+              {dependentsWarning && dependentsWarning.chart_count > 0 ? "Delete anyway" : "Confirm delete"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Guided Metric Builder Modal */}
+      {selectedModel && (
+        <GuidedMetricBuilder
+          open={isGuidedMetricOpen}
+          onOpenChange={setIsGuidedMetricOpen}
+          model={selectedModel}
+          metricToEdit={editingMetric}
+          onSaveSuccess={() => {
+            loadModels(activeConnId);
+            setIsGuidedMetricOpen(false);
+          }}
+        />
+      )}
+
+      {/* Custom Dimension Builder Modal */}
+      {selectedModel && (
+        <DimensionBuilderModal
+          open={isDimensionModalOpen}
+          onOpenChange={setIsDimensionModalOpen}
+          model={selectedModel}
+          dimensionToEdit={editingDimension}
+          onSaveSuccess={() => {
+            loadModels(activeConnId);
+            setIsDimensionModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -62,6 +62,26 @@ export interface ConnectionTestResult {
   checks: CheckItem[];
 }
 
+export interface DependentDashboard {
+  id: string;
+  name: string;
+}
+
+export interface DependentChart {
+  id: string;
+  dashboard_id: string;
+  dashboard_name?: string | null;
+  title: string;
+  chart_type?: string | null;
+}
+
+export interface ModelDependentsResponse {
+  dashboard_count: number;
+  dashboards: DependentDashboard[];
+  chart_count: number;
+  charts: DependentChart[];
+}
+
 export interface DimensionPublic {
   id: string;
   model_id: string;
@@ -71,6 +91,8 @@ export interface DimensionPublic {
   label?: string | null;
   is_identifier: boolean;
   exclude_from_explanation: boolean;
+  is_custom?: boolean;
+  expression?: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -87,6 +109,7 @@ export interface MetricPublic {
   display_format: "currency" | "percent" | "integer" | "decimal";
   higher_is_better: boolean;
   version: number;
+  guided_config?: Record<string, unknown> | null;
   created_at: number;
   updated_at: number;
 }
@@ -136,6 +159,20 @@ export interface MetricPreviewResponse {
   series: MetricPreviewPoint[];
   total_periods: number;
   dialect: string;
+}
+
+export interface DimensionPreviewValue {
+  value: string | number | boolean | null;
+  row_count: number;
+}
+
+export interface DimensionPreviewResponse {
+  valid: boolean;
+  estimated_bytes: number;
+  formatted_bytes: string;
+  total_distinct_values: number;
+  values: DimensionPreviewValue[];
+  error?: string | null;
 }
 
 export interface ChartSpec {
@@ -473,11 +510,14 @@ export const api = {
   async updateDimension(
     dimId: string,
     req: {
+      name?: string;
       label?: string;
       column_expression?: string;
       dimension_type?: "categorical" | "time" | "numeric_bucket";
       is_identifier?: boolean;
       exclude_from_explanation?: boolean;
+      is_custom?: boolean;
+      expression?: string;
     }
   ): Promise<DimensionPublic> {
     const res = await fetch(`${API_BASE}/semantic/dimensions/${dimId}`, {
@@ -503,6 +543,7 @@ export const api = {
       fixed_filter?: string;
       display_format: "currency" | "percent" | "integer" | "decimal";
       higher_is_better?: boolean;
+      guided_config?: Record<string, unknown> | null;
     }
   ): Promise<MetricPublic> {
     const res = await fetch(`${API_BASE}/semantic/models/${modelId}/metrics`, {
@@ -527,6 +568,7 @@ export const api = {
       fixed_filter?: string;
       display_format?: "currency" | "percent" | "integer" | "decimal";
       higher_is_better?: boolean;
+      guided_config?: Record<string, unknown> | null;
     }
   ): Promise<MetricPublic> {
     const res = await fetch(`${API_BASE}/semantic/metrics/${metricId}`, {
@@ -546,6 +588,41 @@ export const api = {
     if (!res.ok) throw await parseApiError(res, "Failed to list connections");
     return res.json();
   },
+
+  async getModelDependents(
+    modelId: string,
+    params?: { metric_name?: string; dimension_name?: string }
+  ): Promise<ModelDependentsResponse> {
+    const q = new URLSearchParams();
+    if (params?.metric_name) q.set("metric_name", params.metric_name);
+    if (params?.dimension_name) q.set("dimension_name", params.dimension_name);
+    const qs = q.toString() ? `?${q.toString()}` : "";
+    const res = await fetch(`${API_BASE}/semantic/models/${modelId}/dependents${qs}`);
+    if (!res.ok) throw await parseApiError(res, "Failed to fetch model dependents");
+    return res.json();
+  },
+
+  async deleteModel(modelId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/semantic/models/${modelId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw await parseApiError(res, "Failed to delete semantic model");
+  },
+
+  async deleteDimension(dimId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/semantic/dimensions/${dimId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw await parseApiError(res, "Failed to delete dimension");
+  },
+
+  async deleteMetric(metricId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/semantic/metrics/${metricId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw await parseApiError(res, "Failed to delete metric");
+  },
+
 
   async validateMetricFormula(req: {
     numerator_expr: string;
@@ -656,6 +733,69 @@ export const api = {
       body: JSON.stringify(req || {}),
     });
     if (!res.ok) throw await parseApiError(res, "Failed to execute dashboard chart");
+    return res.json();
+  },
+
+  async addDashboardChart(
+    dashboardId: string,
+    req: {
+      title?: string;
+      metric: string;
+      breakdown_dimension?: string;
+      chart_type?: string;
+      date_range?: string;
+    }
+  ): Promise<DashboardChartPublic> {
+    const res = await fetch(`${API_BASE}/dashboards/${dashboardId}/charts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+    });
+    if (!res.ok) throw await parseApiError(res, "Failed to add chart to dashboard");
+    return res.json();
+  },
+
+  async deleteDashboardChart(dashboardId: string, chartId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/dashboards/${dashboardId}/charts/${chartId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw await parseApiError(res, "Failed to delete chart");
+  },
+
+  async createDimension(
+    modelId: string,
+    req: {
+      name: string;
+      column_expression: string;
+      dimension_type: "categorical" | "time" | "numeric_bucket";
+      label?: string;
+      is_identifier?: boolean;
+      exclude_from_explanation?: boolean;
+      is_custom?: boolean;
+      expression?: string;
+    }
+  ): Promise<DimensionPublic> {
+    const res = await fetch(`${API_BASE}/semantic/models/${modelId}/dimensions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+    });
+    if (!res.ok) throw await parseApiError(res, "Failed to create dimension");
+    return res.json();
+  },
+
+  async previewDimension(req: {
+    connection_id: string;
+    model_id: string;
+    expression: string;
+    dimension_type?: string;
+  }): Promise<DimensionPreviewResponse> {
+    const res = await fetch(`${API_BASE}/semantic/dimensions/preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+    });
+    if (!res.ok) throw await parseApiError(res, "Failed to preview dimension");
     return res.json();
   },
 };

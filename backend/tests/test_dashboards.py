@@ -256,9 +256,7 @@ def test_dashboard_planner_fixture_a_olist():
 
     # Ratio chart skipped because model has no ratio metric
     ratio_skips = [
-        s
-        for s in plan.skipped_charts
-        if "ratio" in s.title.lower() or "ratio" in s.reason.lower()
+        s for s in plan.skipped_charts if "ratio" in s.title.lower() or "ratio" in s.reason.lower()
     ]
     assert len(ratio_skips) == 1
     assert "ratio" in ratio_skips[0].reason.lower()
@@ -379,9 +377,7 @@ def test_dashboard_planner_fixture_c_no_ratio_metric():
     plan = DashboardPlanner.plan(model)
     assert len(plan.charts) == 4
     ratio_skips = [
-        s
-        for s in plan.skipped_charts
-        if "ratio" in s.title.lower() or "ratio" in s.reason.lower()
+        s for s in plan.skipped_charts if "ratio" in s.title.lower() or "ratio" in s.reason.lower()
     ]
     assert len(ratio_skips) == 1
     assert "ratio" in ratio_skips[0].reason.lower()

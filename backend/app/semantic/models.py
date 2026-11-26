@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -30,6 +30,8 @@ class DimensionBase(BaseModel):
     label: str | None = None
     is_identifier: bool = False
     exclude_from_explanation: bool = False
+    is_custom: bool = False
+    expression: str | None = None
 
 
 class DimensionCreate(DimensionBase):
@@ -42,6 +44,8 @@ class DimensionUpdate(BaseModel):
     dimension_type: DimensionType | None = None
     is_identifier: bool | None = None
     exclude_from_explanation: bool | None = None
+    is_custom: bool | None = None
+    expression: str | None = None
 
 
 class DimensionPublic(DimensionBase):
@@ -65,6 +69,9 @@ class MetricBase(BaseModel):
     )
     display_format: DisplayFormat = Field(default="currency")
     higher_is_better: bool = True
+    guided_config: dict[str, Any] | None = Field(
+        default=None, description="JSON configuration for guided metric builder"
+    )
 
 
 class MetricCreate(MetricBase):
@@ -80,6 +87,7 @@ class MetricUpdate(BaseModel):
     fixed_filter: str | None = None
     display_format: DisplayFormat | None = None
     higher_is_better: bool | None = None
+    guided_config: dict[str, Any] | None = None
 
 
 class MetricVersionPublic(BaseModel):
@@ -181,3 +189,46 @@ class DefaultEcommerceSetRequest(BaseModel):
     project_id: str | None = Field(default=None)
     dataset_id: str | None = Field(default=None)
     table_name: str | None = Field(default=None)
+
+
+class DependentDashboard(BaseModel):
+    id: str
+    name: str
+
+
+class DependentChart(BaseModel):
+    id: str
+    dashboard_id: str
+    dashboard_name: str | None = None
+    title: str
+    chart_type: str | None = None
+    metric: str | None = None
+    dimensions: list[str] = Field(default_factory=list)
+
+
+class ModelDependentsResponse(BaseModel):
+    dashboard_count: int
+    dashboards: list[DependentDashboard]
+    chart_count: int
+    charts: list[DependentChart]
+
+
+class DimensionPreviewRequest(BaseModel):
+    connection_id: str
+    model_id: str
+    expression: str
+    dimension_type: DimensionType = "categorical"
+
+
+class DimensionPreviewValue(BaseModel):
+    value: Any
+    row_count: int
+
+
+class DimensionPreviewResponse(BaseModel):
+    valid: bool
+    estimated_bytes: int = 0
+    formatted_bytes: str = "0 B"
+    values: list[DimensionPreviewValue] = Field(default_factory=list)
+    total_distinct_values: int = 0
+    error: str | None = None

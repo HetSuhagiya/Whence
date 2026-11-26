@@ -3,6 +3,8 @@ from fastapi.responses import StreamingResponse
 
 from app.dashboards.models import (
     ChartRunRequest,
+    DashboardChartCreate,
+    DashboardChartPublic,
     DashboardCreate,
     DashboardPublic,
     ExplainRequest,
@@ -44,6 +46,36 @@ async def get_dashboard(dashboard_id: str) -> DashboardPublic:
 async def delete_dashboard(dashboard_id: str) -> None:
     try:
         dashboard_service.delete_dashboard(dashboard_id)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+
+
+@router.post(
+    "/{dashboard_id}/charts",
+    response_model=DashboardChartPublic,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_chart(
+    dashboard_id: str,
+    req: DashboardChartCreate,
+) -> DashboardChartPublic:
+    try:
+        return dashboard_service.add_chart(dashboard_id, req)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+
+
+@router.delete("/{dashboard_id}/charts/{chart_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_chart(
+    dashboard_id: str,
+    chart_id: str,
+) -> None:
+    try:
+        dashboard_service.delete_chart(dashboard_id, chart_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 

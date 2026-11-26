@@ -210,8 +210,8 @@ export default function StyleGuideClient() {
               Whence editorial design system
             </h2>
             <p className="mt-1 text-[14px] text-[var(--text-muted)] max-w-2xl leading-relaxed">
-              Quiet analytical precision: Radix Slate neutrals, Radix Blue accent, Tableau 10 chart palette,
-              dedicated waterfall bars (#59A14F and #E15759), and WCAG AA contrast measured.
+              Quiet analytical precision: Radix Slate neutrals, Radix Blue accent, Paul Tol muted chart palette,
+              dedicated waterfall bars (Radix green9 #30A46C and red9 #E54D2E), and WCAG AA contrast measured.
             </p>
           </section>
 

@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -14,6 +15,7 @@ from app.connections.models import (
     map_bigquery_error,
 )
 from app.connections.service import ConnectionService
+from app.db import run_migrations
 from app.main import app
 
 DUMMY_PRIVATE_KEY = (
@@ -62,6 +64,7 @@ def mock_bq_client() -> MagicMock:
 
     # Mock get_table
     table_obj = MagicMock()
+    table_obj.location = "US"
     table_obj.table_type = "TABLE"
     table_obj.num_rows = 1500000
     table_obj.num_bytes = 485000000
@@ -401,3 +404,138 @@ async def test_live_bigquery_connection_opt_in() -> None:
     # Live connection test
     test_result = service.test_connection(conn.id)
     assert test_result.overall_status == "passed"
+
+
+def test_save_sources_and_test_connection_regional_location(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verifies that selecting tables in a regional dataset updates connection location,
+    and test_connection uses the detected location for dry-run query jobs."""
+    db_file = str(tmp_path / "test_reg_loc.db")
+    run_migrations(db_file)
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "DATABASE_URL", f"sqlite:///{db_file}")
+    service = ConnectionService()
+
+    conn = service.create_connection(
+        ConnectionCreateRequest(
+            name="Regional BQ",
+            warehouse_type="bigquery",
+            key_json=json.dumps(SAMPLE_SA_KEY),
+            billing_project="primeval-pixel-407210",
+        )
+    )
+    assert conn.location == "US"
+
+    mock_client = MagicMock()
+    mock_table = MagicMock()
+    mock_table.location = "europe-west2"
+    mock_table.table_type = "TABLE"
+    mock_table.schema = [MagicMock()]
+    mock_table.num_rows = 100
+    mock_table.num_bytes = 1000
+    mock_client.get_table.return_value = mock_table
+
+    mock_ds = MagicMock()
+    mock_ds.location = "europe-west2"
+    mock_client.get_dataset.return_value = mock_ds
+    mock_client.list_projects.return_value = [MagicMock(project_id="primeval-pixel-407210")]
+    mock_client.list_datasets.return_value = [MagicMock(dataset_id="dbt_project")]
+
+    job = MagicMock()
+    job.total_bytes_processed = 10485760
+    mock_client.query.return_value = job
+
+    # Saving sources for a regional table must detect and store the location
+    service.save_sources(
+        conn.id,
+        [
+            TableDetail(
+                project_id="primeval-pixel-407210",
+                dataset_id="dbt_project",
+                table_name="fct_orders",
+                table_type="TABLE",
+                row_count=1000,
+                size_bytes=50000,
+                columns=[],
+            )
+        ],
+        client_override=mock_client,
+    )
+
+    updated_conn = service.get_connection(conn.id)
+    assert updated_conn.location == "europe-west2"
+
+    result = service.test_connection(conn.id, client_override=mock_client)
+    assert result.overall_status == "passed"
+    detect_check = next(c for c in result.checks if c.id == "detect_location")
+    assert "europe-west2" in detect_check.message
+
+    # client.query for dry-run in test_connection must receive location='europe-west2'
+    calls = mock_client.query.call_args_list
+    assert len(calls) > 0
+    dry_run_call = calls[-1]
+    assert dry_run_call.kwargs.get("location") == "europe-west2"
+
+
+def test_semantic_service_adapter_self_heals_location_from_sources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verifies that if a connection location was defaulted to 'US', SemanticService
+    dynamically discovers the true dataset location from sources, heals the DB,
+    and supplies the correct regional location to BigQueryAdapter."""
+    db_file = str(tmp_path / "test_heal_loc.db")
+    run_migrations(db_file)
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "DATABASE_URL", f"sqlite:///{db_file}")
+
+    from app.connections.service import connection_service
+    from app.semantic.service import semantic_service
+
+    conn = connection_service.create_connection(
+        ConnectionCreateRequest(
+            name="Stale Location BQ",
+            warehouse_type="bigquery",
+            key_json=json.dumps(SAMPLE_SA_KEY),
+            billing_project="primeval-pixel-407210",
+        )
+    )
+    assert conn.location == "US"
+
+    mock_client = MagicMock()
+    mock_table = MagicMock()
+    mock_table.location = "europe-west2"
+    mock_client.get_table.return_value = mock_table
+
+    service = ConnectionService()
+    service.save_sources(
+        conn.id,
+        [
+            TableDetail(
+                project_id="primeval-pixel-407210",
+                dataset_id="dbt_project",
+                table_name="fct_orders",
+                table_type="TABLE",
+                row_count=1000,
+                size_bytes=50000,
+                columns=[],
+            )
+        ],
+        client_override=mock_client,
+    )
+
+    # Artificially set connection location back to 'US' to simulate pre-existing broken connection
+    db = service._get_db()
+    db.execute("UPDATE connections SET location = 'US' WHERE id = ?", (conn.id,))
+    db.commit()
+    assert service.get_connection(conn.id).location == "US"
+
+    monkeypatch.setattr(connection_service, "_get_bq_client", lambda *args, **kwargs: mock_client)
+
+    adapter = semantic_service.get_adapter_for_connection(conn.id)
+    assert adapter.location == "europe-west2"
+    assert service.get_connection(conn.id).location == "europe-west2"
+
+
