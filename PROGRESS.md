@@ -300,7 +300,8 @@ To manually verify your live BigQuery connection in the UI, follow these steps:
 
 ---
 
-#### Item 4: Explain Engine (Standalone Package, Section 8.1 - 8.4) (Status: Completed)
+#### Item 4: Starta Engine (Standalone Root-Cause Engine, Section 8.1 - 8.4) (Status: Completed)
+- **Branding & Architecture**: Formally named the **Starta Engine** (`app.explain`), Whence's proprietary 10-step deterministic analytical root-cause engine. Exports `StartaEngine` and `ExplainEngine`.
 - **Implementation**:
   - `backend/app/explain/`:
     - **ZERO Web & ZERO LLM Imports**: Zero imports from web frameworks (`fastapi`, `starlette`, `httpx`, `requests`) or LLMs (`openai`, `anthropic`, `google.generativeai`). Verified by AST inspection test in `test_explain_imports.py`.
@@ -321,7 +322,7 @@ To manually verify your live BigQuery connection in the UI, follow these steps:
       8. `step_context_events`: correlates overlapping logged business events.
       9. `step_compute_confidence`: deterministic rules for High, Medium, Low confidence.
       10. `step_assemble_evidence`: outputs structured `Evidence` object with SQL and finding IDs.
-    - `engine.py`: `ExplainEngine` coordinating pipeline execution.
+    - `engine.py`: `StartaEngine` (`ExplainEngine`) coordinating pipeline execution.
 - **Verification**:
   - `backend/tests/test_explain_imports.py`: 1 test passing verifying zero forbidden web/LLM imports.
   - `backend/tests/test_explain.py`: 6 tests passing covering hand-calculated exact rate/mix split, additive contributions and offsetting effects, median/MAD noise checks, completeness flagging, zero-drop data quality detection, and end-to-end high-confidence execution.

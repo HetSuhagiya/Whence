@@ -87,13 +87,13 @@ Whence/
 │   │   │   ├── spec.py          # ChartSpec, ChartType, TimeGrain, and CompiledQuery schemas
 │   │   │   ├── compiler.py      # QueryCompiler: multi-dialect SQL generator (DuckDB & BigQuery) with CTE ratio logic & identifier validation
 │   │   │   └── router.py        # REST API endpoints (/api/v1/compiler)
-│   │   ├── explain/             # [Phase 1 - Item 4] Standalone explain engine package (ZERO web/LLM imports)
-│   │   │   ├── __init__.py      # Public exports
+│   │   ├── explain/             # [Phase 1 - Item 4] Starta Engine: standalone deterministic 10-step analytical engine (ZERO web/LLM imports)
+│   │   │   ├── __init__.py      # Public exports (ExplainEngine, StartaEngine)
 │   │   │   ├── models.py        # Pydantic models: Evidence, Finding, DriverContribution, NoiseCheckResult, SeasonalityResult
 │   │   │   ├── interface.py     # Small warehouse-agnostic QueryRunner protocol
 │   │   │   ├── contribution.py  # Section 8.3 maths: additive deltas, offsetting effects, exact two-point rate/mix split
 │   │   │   ├── pipeline.py      # Section 8.2 typed pipeline functions (resolve, completeness, noise, seasonality, drivers, drill, dq, events, confidence, evidence)
-│   │   │   └── engine.py        # ExplainEngine orchestrator
+│   │   │   └── engine.py        # StartaEngine / ExplainEngine orchestrator
 │   │   ├── narrative/           # [Phase 1 - Item 6] Verified narrative generation
 │   │   │   ├── __init__.py
 │   │   │   ├── client.py        # LLMClient protocol, daily token tracker, fake/gemini/openai providers

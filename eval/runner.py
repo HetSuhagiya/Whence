@@ -191,7 +191,7 @@ def run_evaluation() -> dict[str, Any]:
         scenarios = json.load(f)
 
     print("=" * 80)
-    print("WHENCE EXPLAIN ENGINE — EVALUATION HARNESS (SECTION 15)")
+    print("WHENCE STARTA ENGINE — EVALUATION HARNESS (SECTION 15)")
     print("=" * 80)
 
     # 1. Run Development Set

@@ -28,7 +28,7 @@ describe("ExplainDialog Component States (Item 7)", () => {
       />
     );
 
-    expect(screen.getByText(/Running 10-step explain pipeline/i)).toBeInTheDocument();
+    expect(screen.getByText(/Running 10-step Starta engine pipeline/i)).toBeInTheDocument();
     expect(screen.getByText("Resolve comparison windows")).toBeInTheDocument();
     expect(screen.getByText("Evaluate normal volatility (Median / MAD)")).toBeInTheDocument();
     expect(screen.getByText("Generate & verify plain narrative")).toBeInTheDocument();
