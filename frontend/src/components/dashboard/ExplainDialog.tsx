@@ -107,7 +107,83 @@ interface ExplainDialogProps {
   targetPoint?: string;
   baselineMode: "previous_period" | "same_weekday_last_week" | "same_period_last_year" | "trailing_average";
   onBaselineModeChange: (mode: "previous_period" | "same_weekday_last_week" | "same_period_last_year" | "trailing_average") => void;
+  dateRange?: string | Record<string, string>;
+  startDate?: string;
+  endDate?: string;
   initialCompletedData?: ExplainCompletedPayload; // For test harness / mocks
+}
+
+function renderHighlightedText(text: string) {
+  // Regex to match percentages, signed/decimal numbers, action verbs, and quoted segment names
+  const tokenRegex = /([+-]?\d+(?:\.\d+)?%)|([+-]?\d{1,3}(?:,\d{3})*(?:\.\d+)?)|('(?:[^']*)')|\b(decreased|declined|fell|dropped|increased|rose|grew)\b/gi;
+
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = tokenRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+
+    const [fullMatch, pct, num, quoted, verb] = match;
+
+    if (pct) {
+      const isNeg = pct.startsWith("-");
+      parts.push(
+        <span
+          key={match.index}
+          className={`inline-flex items-center px-1.5 py-0.2 rounded font-mono font-medium text-[12px] border ${
+            isNeg
+              ? "bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-900/40"
+              : "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/40"
+          }`}
+        >
+          {pct}
+        </span>
+      );
+    } else if (verb) {
+      const isDown = ["decreased", "declined", "fell", "dropped"].includes(verb.toLowerCase());
+      parts.push(
+        <span
+          key={match.index}
+          className={`font-semibold inline-flex items-center gap-0.5 ${
+            isDown ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"
+          }`}
+        >
+          {isDown ? "↓" : "↑"} {verb}
+        </span>
+      );
+    } else if (quoted) {
+      parts.push(
+        <span
+          key={match.index}
+          className="inline-flex items-center px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/40 font-mono text-[12px]"
+        >
+          {quoted}
+        </span>
+      );
+    } else if (num && (num.includes(".") || num.includes(",") || num.startsWith("-") || num.startsWith("+") || num.length > 2)) {
+      parts.push(
+        <span
+          key={match.index}
+          className="inline-flex items-center px-1 py-0.2 rounded font-mono font-medium bg-[var(--bg-subtle)] text-[var(--text-main)] border border-[var(--border-hairline)] text-[12px]"
+        >
+          {num}
+        </span>
+      );
+    } else {
+      parts.push(fullMatch);
+    }
+
+    lastIndex = match.index + fullMatch.length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts;
 }
 
 interface StepProgress {
@@ -126,6 +202,9 @@ export function ExplainDialog({
   targetPoint,
   baselineMode,
   onBaselineModeChange,
+  dateRange,
+  startDate,
+  endDate,
   initialCompletedData,
 }: ExplainDialogProps) {
   const [activeTab, setActiveTab] = React.useState<"summary" | "evidence" | "checks">("summary");
@@ -188,6 +267,9 @@ export function ExplainDialog({
             body: JSON.stringify({
               target_point: targetPoint || null,
               baseline_mode: baselineMode,
+              date_range: dateRange,
+              start_date: startDate,
+              end_date: endDate,
             }),
             signal: abortController.signal,
           }
@@ -238,7 +320,7 @@ export function ExplainDialog({
     return () => {
       abortController.abort();
     };
-  }, [isOpen, dashboardId, chartId, targetPoint, baselineMode, initialCompletedData]);
+  }, [isOpen, dashboardId, chartId, targetPoint, baselineMode, dateRange, startDate, endDate, initialCompletedData]);
 
   const handleStreamEvent = (data: { event: string; step?: number; detail?: string; message?: string; evidence?: EvidencePayload; narrative?: NarrativePayload }) => {
     if (data.event === "step_start") {
@@ -480,19 +562,29 @@ export function ExplainDialog({
               </div>
 
               {/* Driver Waterfall / Dimension View */}
-              {driversList.length > 0 && !hasDataIssue && confidence !== "Low" ? (
-                <DimensionSelectorWaterfall
-                  dimensionWaterfalls={
-                    evidence.dimension_waterfalls && Object.keys(evidence.dimension_waterfalls).length > 0
-                      ? evidence.dimension_waterfalls
-                      : { [driversList[0]?.dimension || "all"]: driversList }
-                  }
-                  dimensionShares={evidence.dimension_shares || {}}
-                  segmentLift={evidence.segment_lift || evidence.lift_by_segment || {}}
-                  ruledOutDimensions={evidence.ruled_out_dimensions || []}
-                  onDrillSegment={(seg) => setDrilledSegment(seg)}
-                  isDark={isDark}
-                />
+              {driversList.length > 0 && !hasDataIssue ? (
+                <div className="flex flex-col gap-2">
+                  {confidence === "Low" && (
+                    <div className="flex items-center gap-2 p-2.5 rounded-[4px] bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 text-[12px] border border-amber-200 dark:border-amber-900/30">
+                      <Info className="h-4 w-4 shrink-0" />
+                      <span>
+                        Movement is broadly distributed across categories or within historical noise. Contributing segment breakdown across monitored dimensions:
+                      </span>
+                    </div>
+                  )}
+                  <DimensionSelectorWaterfall
+                    dimensionWaterfalls={
+                      evidence.dimension_waterfalls && Object.keys(evidence.dimension_waterfalls).length > 0
+                        ? evidence.dimension_waterfalls
+                        : { [driversList[0]?.dimension || "all"]: driversList }
+                    }
+                    dimensionShares={evidence.dimension_shares || {}}
+                    segmentLift={evidence.segment_lift || evidence.lift_by_segment || {}}
+                    ruledOutDimensions={evidence.ruled_out_dimensions || []}
+                    onDrillSegment={(seg) => setDrilledSegment(seg)}
+                    isDark={isDark}
+                  />
+                </div>
               ) : (
                 /* Calm "no single cause stands out" notice */
                 <div
@@ -566,11 +658,61 @@ export function ExplainDialog({
 
                 {/* Tab 1: Summary */}
                 {activeTab === "summary" && (
-                  <div className="flex flex-col gap-3 text-[13px] leading-relaxed text-[var(--text-main)]">
-                    <p className="font-medium">{narrative?.headline}</p>
-                    <div className="flex flex-col gap-1.5 text-[var(--text-muted)]">
+                  <div className="flex flex-col gap-4 text-[13px] leading-relaxed text-[var(--text-main)]">
+                    {/* At-a-Glance KPI Strip */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-[4px] border border-[var(--border-hairline)] bg-[var(--bg-app)] text-[12px]">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[11px] text-[var(--text-muted)]">Baseline ({evidence.baseline_window?.start || "Baseline"})</span>
+                        <span className="font-mono font-medium text-[var(--text-main)] text-[13px]">
+                          {evidence.baseline_value != null ? Number(evidence.baseline_value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[11px] text-[var(--text-muted)]">Current ({evidence.current_window?.start || "Current"})</span>
+                        <span className="font-mono font-medium text-[var(--text-main)] text-[13px]">
+                          {evidence.current_value != null ? Number(evidence.current_value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[11px] text-[var(--text-muted)]">Net Change</span>
+                        <div className="flex items-center gap-1 font-mono font-semibold text-[13px]">
+                          {(evidence.delta ?? 0) < 0 ? (
+                            <span className="inline-flex items-center text-red-600 dark:text-red-400">
+                              ↓ {Number(evidence.delta).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center text-emerald-600 dark:text-emerald-400">
+                              ↑ +{Number(evidence.delta).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          )}
+                          <span className="text-[11px] font-normal text-[var(--text-muted)]">
+                            ({(evidence.percent_change ?? 0) >= 0 ? "+" : ""}{(evidence.percent_change ?? 0).toFixed(1)}%)
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[11px] text-[var(--text-muted)]">Lead Driver</span>
+                        <div className="font-mono font-medium text-[var(--text-main)] truncate text-[12px]">
+                          {driversList.length > 0 ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--bg-subtle)] text-[var(--text-main)] border border-[var(--border-hairline)]">
+                              {driversList[0].segment_value} ({(driversList[0].share_of_change * 100).toFixed(1)}%)
+                            </span>
+                          ) : (
+                            <span className="text-[var(--text-muted)] italic font-sans text-[11px]">Distributed across segments</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="font-medium text-[14px] leading-snug">
+                      {narrative?.headline && renderHighlightedText(narrative.headline)}
+                    </div>
+                    <div className="flex flex-col gap-2 text-[var(--text-main)]">
                       {narrative?.supporting_sentences?.map((s: string, idx: number) => (
-                        <p key={idx}>• {s}</p>
+                        <div key={idx} className="flex items-start gap-2">
+                          <span className="text-[var(--text-muted)] select-none mt-0.5">•</span>
+                          <p className="flex-1 leading-relaxed">{renderHighlightedText(s)}</p>
+                        </div>
                       ))}
                     </div>
 

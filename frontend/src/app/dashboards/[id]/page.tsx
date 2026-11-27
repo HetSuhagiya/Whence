@@ -428,6 +428,9 @@ export default function DashboardDetailPage() {
             targetPoint={explainPoint}
             baselineMode={baselineMode}
             onBaselineModeChange={setBaselineMode}
+            dateRange={dateRange === "custom" && customStart && customEnd ? { start: customStart, end: customEnd } : dateRange}
+            startDate={dateRange === "custom" ? customStart : undefined}
+            endDate={dateRange === "custom" ? customEnd : undefined}
           />
         )}
 
