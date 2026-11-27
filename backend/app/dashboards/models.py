@@ -67,3 +67,6 @@ class ExplainRequest(BaseModel):
         "same_period_last_year",
         "trailing_average",
     ] = "previous_period"
+    date_range: str | dict[str, str] | None = None
+    start_date: str | None = None
+    end_date: str | None = None

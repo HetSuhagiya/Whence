@@ -394,18 +394,43 @@ class ExplainEngine:
             },
         ]
 
-        next_inquiries = []
+        next_inquiries: list[str] = []
+        curr_period_desc = c_win.get("start", "the current period")
+        if not curr_period_desc or curr_period_desc == "latest":
+            curr_period_desc = "the current period"
+
         if top_driver:
-            next_inquiries.append(f"Did marketing promotions, pricing updates, or inventory shifts occur for '{top_driver.segment_value}' in {top_driver.dimension}?")
+            next_inquiries.append(
+                f"Did marketing promotions, pricing updates, or inventory shifts occur for '{top_driver.segment_value}' in {top_driver.dimension}?"
+            )
+        if len(drivers) > 1:
+            d2 = drivers[1]
+            next_inquiries.append(
+                f"Were operational disruptions, supplier delays, or category changes observed for '{d2.segment_value}' in {d2.dimension}?"
+            )
         if timing_summary and ("concentrated" in timing_summary or "%" in timing_summary):
-            peak_text = timing_summary.split("on ")[-1] if "on " in timing_summary else "the peak day"
+            peak_text = timing_summary.split("on ")[-1] if "on " in timing_summary else "the peak period"
             next_inquiries.append(f"What operational campaigns, scheduled releases, or external events occurred on {peak_text}?")
         if ratio_decomposition and abs(float(ratio_decomposition.get("mix_share", 0.0))) > 20:
             next_inquiries.append("Did user acquisition sources or checkout funnel incentives shift customer mix toward different segments?")
         if ruled_out_dimensions:
-            next_inquiries.append(f"Could macroeconomic or seasonality factors outside ruled-out dimensions ({', '.join(ruled_out_dimensions)}) explain remaining variance?")
-        while len(next_inquiries) < 2:
-            next_inquiries.append(f"Were tracking instruments or schema migrations deployed around {c_win.get('start', 'the current period')}?")
+            next_inquiries.append(
+                f"Could macroeconomic or seasonality factors outside ruled-out dimensions ({', '.join(ruled_out_dimensions)}) explain remaining variance?"
+            )
+
+        # Deduplicate & fill diverse inquiries up to 3-4
+        fallbacks = [
+            f"Were tracking instruments, data pipelines, or ingestion jobs delayed around {curr_period_desc}?",
+            f"Did regional shipping operations or fulfillment SLAs change during {curr_period_desc}?",
+            "Were catalog price changes, fee structures, or promotional vouchers modified in this comparison window?",
+        ]
+        seen = set(next_inquiries)
+        for fb in fallbacks:
+            if len(next_inquiries) >= 3:
+                break
+            if fb not in seen:
+                seen.add(fb)
+                next_inquiries.append(fb)
         next_inquiries = next_inquiries[:4]
 
         # 10. Assemble Evidence
