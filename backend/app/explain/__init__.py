@@ -2,7 +2,7 @@ from app.explain.contribution import (
     compute_additive_contributions,
     compute_ratio_rate_mix_split,
 )
-from app.explain.engine import ExplainEngine
+from app.explain.engine import ExplainEngine, StartaEngine
 from app.explain.interface import AsyncQueryRunner, QueryRunnerProtocol, SyncQueryRunner
 from app.explain.models import (
     ConfidenceLevel,
@@ -18,6 +18,7 @@ from app.explain.models import (
 
 __all__ = [
     "ExplainEngine",
+    "StartaEngine",
     "Evidence",
     "DriverContribution",
     "DrillFinding",

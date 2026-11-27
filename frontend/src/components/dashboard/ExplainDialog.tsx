@@ -461,7 +461,7 @@ export function ExplainDialog({
               <div className="flex items-center gap-3">
                 <Loader2 className="h-5 w-5 animate-spin text-[var(--accent)]" />
                 <span className="font-heading text-[15px] font-medium text-[var(--text-main)]">
-                  Running 10-step explain pipeline...
+                  Running 10-step Starta engine pipeline...
                 </span>
               </div>
 

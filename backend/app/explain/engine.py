@@ -22,8 +22,8 @@ from app.explain.pipeline import (
 
 class ExplainEngine:
     """
-    Deterministic Explain Engine for Whence.
-    Implements the 8.2 pipeline and 8.3 contribution maths as a standalone package.
+    Starta Engine: The deterministic root-cause analytical engine for Whence.
+    Implements the 10-step pipeline and exact contribution maths as a standalone package.
     Has zero web and zero LLM dependencies.
     """
 
@@ -467,3 +467,7 @@ class ExplainEngine:
             next_inquiries=next_inquiries,
         )
         return evidence
+
+
+# Alias for Whence's Starta Engine
+StartaEngine = ExplainEngine
